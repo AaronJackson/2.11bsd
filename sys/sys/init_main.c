@@ -40,6 +40,72 @@ extern	size_t physmem;
 extern	struct	mapent _coremap[];
 
 /*
+ * Initialize hash links for buffers.
+ */
+static
+bhinit()
+{
+	register int i;
+	register struct bufhd *bp;
+
+	for (bp = bufhash, i = 0; i < BUFHSZ; i++, bp++)
+		bp->b_forw = bp->b_back = (struct buf *)bp;
+}
+
+memaddr	bpaddr;		/* physical click-address of buffers */
+/*
+ * Initialize the buffer I/O system by freeing
+ * all buffers and setting all device buffer lists to empty.
+ */
+static
+binit()
+{
+	register struct buf *bp;
+	register int i;
+	long paddr;
+
+	for (bp = bfreelist; bp < &bfreelist[BQUEUES]; bp++)
+		bp->b_forw = bp->b_back = bp->av_forw = bp->av_back = bp;
+	paddr = ((long)bpaddr) << 6;
+	for (i = 0; i < nbuf; i++, paddr += MAXBSIZE) {
+		bp = &buf[i];
+		bp->b_dev = NODEV;
+		bp->b_bcount = 0;
+		bp->b_un.b_addr = (caddr_t)loint(paddr);
+		bp->b_xmem = hiint(paddr);
+		binshash(bp, &bfreelist[BQ_AGE]);
+		bp->b_flags = B_BUSY|B_INVAL;
+		brelse(bp);
+	}
+}
+
+/*
+ * Initialize clist by freeing all character blocks, then count
+ * number of character devices. (Once-only routine)
+ */
+static
+cinit()
+{
+	register int ccp;
+	register struct cblock *cp;
+
+	ccp = (int)cfree;
+#ifdef UCB_CLIST
+	mapseg5(clststrt, clstdesc);	/* don't save, we know it's normal */
+#else
+	ccp = (ccp + CROUND) & ~CROUND;
+#endif
+	for (cp = (struct cblock *)ccp; cp <= &cfree[nclist - 1]; cp++) {
+		cp->c_next = cfreelist;
+		cfreelist = cp;
+		cfreecount += CBSIZE;
+	}
+#ifdef UCB_CLIST
+	normalseg5();
+#endif
+}
+
+/*
  * Initialization code.
  * Called from cold start routine as
  * soon as a stack and segmentation
@@ -254,71 +320,7 @@ main()
 		sched();
 }
 
-/*
- * Initialize hash links for buffers.
- */
-static
-bhinit()
-{
-	register int i;
-	register struct bufhd *bp;
 
-	for (bp = bufhash, i = 0; i < BUFHSZ; i++, bp++)
-		bp->b_forw = bp->b_back = (struct buf *)bp;
-}
-
-memaddr	bpaddr;		/* physical click-address of buffers */
-/*
- * Initialize the buffer I/O system by freeing
- * all buffers and setting all device buffer lists to empty.
- */
-static
-binit()
-{
-	register struct buf *bp;
-	register int i;
-	long paddr;
-
-	for (bp = bfreelist; bp < &bfreelist[BQUEUES]; bp++)
-		bp->b_forw = bp->b_back = bp->av_forw = bp->av_back = bp;
-	paddr = ((long)bpaddr) << 6;
-	for (i = 0; i < nbuf; i++, paddr += MAXBSIZE) {
-		bp = &buf[i];
-		bp->b_dev = NODEV;
-		bp->b_bcount = 0;
-		bp->b_un.b_addr = (caddr_t)loint(paddr);
-		bp->b_xmem = hiint(paddr);
-		binshash(bp, &bfreelist[BQ_AGE]);
-		bp->b_flags = B_BUSY|B_INVAL;
-		brelse(bp);
-	}
-}
-
-/*
- * Initialize clist by freeing all character blocks, then count
- * number of character devices. (Once-only routine)
- */
-static
-cinit()
-{
-	register int ccp;
-	register struct cblock *cp;
-
-	ccp = (int)cfree;
-#ifdef UCB_CLIST
-	mapseg5(clststrt, clstdesc);	/* don't save, we know it's normal */
-#else
-	ccp = (ccp + CROUND) & ~CROUND;
-#endif
-	for (cp = (struct cblock *)ccp; cp <= &cfree[nclist - 1]; cp++) {
-		cp->c_next = cfreelist;
-		cfreelist = cp;
-		cfreecount += CBSIZE;
-	}
-#ifdef UCB_CLIST
-	normalseg5();
-#endif
-}
 
 #ifdef INET
 memaddr netdata;		/* click address of start of net data */
