@@ -99,6 +99,32 @@ struct mbuf {
  */
 #define	MPULL_EXTRA	32
 
+/*
+ * Mbuf statistics.
+ */
+struct mbstat {
+	u_short	m_mbufs;	/* mbufs obtained from page pool */
+	u_short	m_clusters;	/* clusters obtained from page pool */
+	u_short	m_space;	/* interface pages obtained from page pool */
+	u_short	m_clfree;	/* free clusters */
+	u_short	m_drops;	/* times failed to find space */
+	u_short m_wait;		/* times waited for space */
+	u_short m_drain;	/* times drained protocols for space */
+	u_short	m_mtypes[NMBTYPES];	/* type specific mbuf allocations */
+};
+
+#ifdef	SUPERVISOR
+extern	struct	mbuf *mbutl;		/* virtual address of net free mem */
+struct	mbstat mbstat;
+int	nmbclusters;
+struct	mbuf *mfree, *mclfree;
+char	mclrefcnt[NMBCLUSTERS + 1];
+int	m_want;
+struct	mbuf *m_get(),*m_getclr(),*m_free(),*m_more(),*m_copy(),*m_pullup();
+#ifndef	pdp11
+caddr_t	m_clalloc();
+#endif
+
 #define	MGET(m, i, t) \
 	{ int ms = splimp(); \
 	  if ((m)=mfree) \
@@ -166,29 +192,5 @@ struct mbuf {
 	  } \
 	}
 
-/*
- * Mbuf statistics.
- */
-struct mbstat {
-	u_short	m_mbufs;	/* mbufs obtained from page pool */
-	u_short	m_clusters;	/* clusters obtained from page pool */
-	u_short	m_space;	/* interface pages obtained from page pool */
-	u_short	m_clfree;	/* free clusters */
-	u_short	m_drops;	/* times failed to find space */
-	u_short m_wait;		/* times waited for space */
-	u_short m_drain;	/* times drained protocols for space */
-	u_short	m_mtypes[NMBTYPES];	/* type specific mbuf allocations */
-};
 
-#ifdef	SUPERVISOR
-extern	struct	mbuf *mbutl;		/* virtual address of net free mem */
-struct	mbstat mbstat;
-int	nmbclusters;
-struct	mbuf *mfree, *mclfree;
-char	mclrefcnt[NMBCLUSTERS + 1];
-int	m_want;
-struct	mbuf *m_get(),*m_getclr(),*m_free(),*m_more(),*m_copy(),*m_pullup();
-#ifndef	pdp11
-caddr_t	m_clalloc();
-#endif
 #endif
