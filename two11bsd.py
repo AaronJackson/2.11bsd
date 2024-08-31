@@ -37,11 +37,24 @@ def mkkernel(output='/tmp/two11bsd.elf'):
 		'FREAD=0x01',
 		'FWRITE=0x10',
 		'O_FSYNC=0x0',
+		'FNONBLOCK=0x0',
+		## kern_descrip.c
+		'LOCK_UN=0x0',
+		'FSHLOCK=0x0',
+		'FEXLOCK=0x0',
+		'LOCK_SH=0x0',
+		'LOCK_EX=0x0',
+		'FCNTLFLAGS=0x0',
+		## uipc_usreq.c
+		'FDEFER=0x0',
+		'FMARK=0x0',
 	]
 	includes = [
 		'./sys/h', 
 		'./include', 
 		'/tmp/bsd',
+		'./sys/GENERIC',  ## for acc.h required by sys_net.c
+		#'./sys/QT',  ## GENERIC?CURLY? for acc.h required by sys_net.c
 	]
 	if not os.path.isdir('/tmp/bsd'): os.mkdir('/tmp/bsd')
 	if not os.path.isdir('/tmp/bsd/sys'): os.mkdir('/tmp/bsd/sys')
@@ -49,18 +62,11 @@ def mkkernel(output='/tmp/two11bsd.elf'):
 
 	os.system('cp -v ./sys/h/*.h /tmp/bsd/sys/.')
 	os.system('cp -v ./sys/machine/*.h /tmp/bsd/machine/.')
-	#os.system('cp -v ./sys/h/param.h /tmp/bsd/.')  ## for sys/tty.c
-	##os.system('cp -v ./sys/h/signal.h /tmp/bsd/.')  ## 2.11BSD
-	#os.system('cp -v ./include/signal.h /tmp/bsd/.')  ## 2.10BSD
-	#for h in 'user ioctl'.split():  ## ugly workaround
-	#	os.system('cp -v ./sys/h/%s.h /tmp/bsd/.' % h)
-
 
 	obs = []
 	for name in os.listdir('./sys/sys/'):
 		assert name.endswith('.c')
 		print(name)
-		#if name.startswith('vfs_'): continue
 		o = c2o(
 			os.path.join('./sys/sys', name), 
 			out = '/tmp/%s.o' % name,
