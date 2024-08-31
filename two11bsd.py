@@ -48,6 +48,13 @@ def mkkernel(output='/tmp/two11bsd.elf'):
 		## uipc_usreq.c
 		'FDEFER=0x0',
 		'FMARK=0x0',
+		## sys_inode.c
+		'LOCK_NB=0x0',
+		'FFSYNC=0x0',
+		## ufs_syscalls.c
+		'FMASK=0x0',
+		'O_EXLOCK=0x0',
+		'O_SHLOCK=0x0',
 	]
 	includes = [
 		'./sys/h', 
@@ -59,14 +66,16 @@ def mkkernel(output='/tmp/two11bsd.elf'):
 	if not os.path.isdir('/tmp/bsd'): os.mkdir('/tmp/bsd')
 	if not os.path.isdir('/tmp/bsd/sys'): os.mkdir('/tmp/bsd/sys')
 	if not os.path.isdir('/tmp/bsd/machine'): os.mkdir('/tmp/bsd/machine')
+	if not os.path.isdir('/tmp/bsd/netinet'): os.mkdir('/tmp/bsd/netinet')
 
 	os.system('cp -v ./sys/h/*.h /tmp/bsd/sys/.')
 	os.system('cp -v ./sys/machine/*.h /tmp/bsd/machine/.')
+	os.system('cp -v ./sys/netinet/*.h /tmp/bsd/netinet/.')
 
 	obs = []
 	for name in os.listdir('./sys/sys/'):
-		assert name.endswith('.c')
 		print(name)
+		if not name.endswith('.c'): continue ## TODO parse tags
 		o = c2o(
 			os.path.join('./sys/sys', name), 
 			out = '/tmp/%s.o' % name,
