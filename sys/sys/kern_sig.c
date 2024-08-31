@@ -469,7 +469,7 @@ issignal(p)
 
 		switch ((int)u.u_signal[sig]) {
 
-		case SIG_DFL:
+		case (int)SIG_DFL:
 			/*
 			 * Don't take default actions on system processes.
 			 */
@@ -512,7 +512,7 @@ issignal(p)
 				return(sig);
 			/*NOTREACHED*/
 
-		case SIG_IGN:
+		case (int)SIG_IGN:
 			/*
 			 * Masking above should prevent us
 			 * ever trying to take action on a held
