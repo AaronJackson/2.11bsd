@@ -583,6 +583,26 @@ updret:
 	iupdat(oip, &time, &time, 1);
 }
 
+
+static
+trsingle(ip, bp,last, aflags)
+	register struct inode *ip;
+	caddr_t bp;
+	daddr_t last;
+	int aflags;
+{
+	register daddr_t *bstart, *bstop;
+	daddr_t blarray[NINDIR];
+
+	bcopy(mapin(bp),blarray,NINDIR * sizeof(daddr_t));
+	mapout(bp);
+	bstart = &blarray[NINDIR - 1];
+	bstop = &blarray[last];
+	for (;bstart > bstop;--bstart)
+		if (*bstart)
+			free(ip, *bstart);
+}
+
 /*
  * Release blocks associated with the inode ip and
  * stored in the indirect block bn.  Blocks are free'd
@@ -695,24 +715,6 @@ indirtrunc(ip, bn, lastbn, level, aflags)
 	brelse(bp);
 }
 
-static
-trsingle(ip, bp,last, aflags)
-	register struct inode *ip;
-	caddr_t bp;
-	daddr_t last;
-	int aflags;
-{
-	register daddr_t *bstart, *bstop;
-	daddr_t blarray[NINDIR];
-
-	bcopy(mapin(bp),blarray,NINDIR * sizeof(daddr_t));
-	mapout(bp);
-	bstart = &blarray[NINDIR - 1];
-	bstop = &blarray[last];
-	for (;bstart > bstop;--bstart)
-		if (*bstart)
-			free(ip, *bstart);
-}
 
 /*
  * remove any inodes in the inode cache belonging to dev
