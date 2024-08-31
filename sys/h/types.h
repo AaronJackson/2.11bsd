@@ -36,6 +36,7 @@ typedef	struct	label_t	{
 } label_t;
 #endif
 #ifdef __riscv
+typedef	struct	_physadr { short r[1]; } *physadr;
 typedef struct  label_t {
     unsigned val[33];               /* regs x0-x31, GP */
     #ifdef __riscv_f
