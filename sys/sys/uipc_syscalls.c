@@ -23,7 +23,10 @@
 #include "socketvar.h"
 #include "uio.h"
 #include "domain.h"
+#ifdef __riscv
+#else
 #include "pdpif/if_uba.h"
+#endif
 #include "netinet/in.h"
 #include "netinet/in_systm.h"
 
