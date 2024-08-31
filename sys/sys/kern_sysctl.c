@@ -299,6 +299,18 @@ kern_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 /*
  * hardware related system variables.
  */
+
+static char *cpu2str(char *buf, int len){
+	register char *cp = buf + len;
+	register int i = cputype;
+	*--cp = '\0';
+	do{
+		*--cp = (i % 10) + '0';
+	} while (i /= 10);
+	return(cp);
+}
+
+
 hw_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 	int *name;
 	u_int namelen;
@@ -337,21 +349,6 @@ hw_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 	/* NOTREACHED */
 }
 
-static char *
-cpu2str(buf, len)
-	char	*buf;
-	int	len;
-	{
-	register char *cp = buf + len;
-	register int i = cputype;
-
-	*--cp = '\0';
-	do
-		{
-		*--cp = (i % 10) + '0';
-		} while (i /= 10);
-	return(cp);
-	}
 
 #ifdef DEBUG
 /*
