@@ -1,6 +1,61 @@
 #!/usr/bin/env python3
 import os, sys, subprocess
 
+RISCV_MACHINE = '''
+#include <stdint.h>
+#define size_t uint32_t
+
+struct user *u = 0;
+
+int copyin(const void *fromaddr, void *toaddr, size_t length) {
+	// Check for invalid addresses or lengths
+	if (!fromaddr || !toaddr || length % sizeof(uint32_t) != 0) {
+		return -1;
+	}
+
+	// Ensure proper memory alignment for 32-bit words
+	if ((uintptr_t)fromaddr & 3 || (uintptr_t)toaddr & 3) {
+		return -1;
+	}
+
+	// Calculate the number of 32-bit words to copy
+	size_t num_words = length / sizeof(uint32_t);
+
+	// Copy 32-bit words using a loop
+	for (size_t i = 0; i < num_words; ++i) {
+		uint32_t word = *((uint32_t *)fromaddr + i);
+		*((uint32_t *)toaddr + i) = word;
+	}
+
+	return 0; // Success
+}
+
+int copyout(const void *fromaddr, void *toaddr, size_t length) {
+	// Check for invalid addresses or lengths
+	if (!fromaddr || !toaddr || length % sizeof(uint32_t) != 0) {
+		return -1;
+	}
+
+	// Ensure proper memory alignment for 32-bit words
+	if ((uintptr_t)fromaddr & 3 || (uintptr_t)toaddr & 3) {
+		return -1;
+	}
+
+	// Calculate the number of 32-bit words to copy
+	size_t num_words = length / sizeof(uint32_t);
+
+	// Copy 32-bit words using a loop
+	for (size_t i = 0; i < num_words; ++i) {
+		uint32_t word = *((uint32_t *)fromaddr + i);
+		*((uint32_t *)toaddr + i) = word;
+	}
+
+	return 0; // Success
+}
+
+
+'''
+
 
 def c2o(file, out='/tmp/c2o.o', includes=None, defines=None, opt='-O0', bits=64 ):
 	if 'fedora' in os.uname().nodename:
@@ -81,6 +136,14 @@ def mkkernel(output='/tmp/two11bsd.elf'):
 			out = '/tmp/%s.o' % name,
 			includes=includes, defines=defines, bits=32)
 		obs.append(o)
+
+	rtmp = '/tmp/_riscv_.c'
+	open(rtmp,'w').write(RISCV_MACHINE)
+	o = c2o(
+		rtmp, 
+		out = '/tmp/_riscv_.o',
+		includes=includes, defines=defines, bits=32)
+	obs.append(o)
 
 	macho = []
 	for name in 'machdep'.split():
