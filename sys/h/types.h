@@ -4,6 +4,7 @@
  * specifies the terms and conditions for redistribution.
  *
  *	@(#)types.h	1.4.1 (2.11BSD) 2000/2/28
+ *	@(#)types.h	RISC-V 2024 BrentHarts
  */
 
 #ifndef _TYPES_
@@ -32,6 +33,14 @@ typedef	unsigned short	ushort;		/* sys III compat */
 typedef	struct	_physadr { short r[1]; } *physadr;
 typedef	struct	label_t	{
 	int	val[8];			/* regs 2-7, __ovno and super SP */
+} label_t;
+#endif
+#ifdef __riscv
+typedef struct  label_t {
+    unsigned val[33];               /* regs x0-x31, GP */
+    #ifdef __riscv_f
+    unsigned fval[32];               /* regs f0-f31 */
+    #endif
 } label_t;
 #endif
 typedef	struct	_quad { long val[2]; } quad;
