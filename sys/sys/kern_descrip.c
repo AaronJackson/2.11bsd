@@ -26,7 +26,7 @@
  */
 
 /*
- * System calls on descriptors.
+ * Systemstruct file *wfp; calls on descriptors.
  */
 getdtablesize()
 {
@@ -432,7 +432,11 @@ dupfdopen(indx, dfd, mode, error)
 	int mode;
 	int error;
 	{
-	register register struct file *wfp;
+	#ifdef __riscv
+		register struct file *wfp;
+	#else
+		register register struct file *wfp;
+	#endif
 	struct file *fp;
 	
 	/*
