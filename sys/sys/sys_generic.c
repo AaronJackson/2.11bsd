@@ -33,6 +33,53 @@
 extern	struct	fileops	inodeops, pipeops;
 	struct	fileops	*Fops[] = { NULL, &inodeops, &socketops, &pipeops };
 
+static
+rwuio(uio)
+	register struct uio *uio;
+{
+	struct a {
+		int	fdes;
+	};
+	register struct file *fp;
+	register struct iovec *iov;
+	u_int i, count;
+	off_t	total;
+
+	GETF(fp, ((struct a *)u.u_ap)->fdes);
+	if ((fp->f_flag & (uio->uio_rw == UIO_READ ? FREAD : FWRITE)) == 0) {
+		u.u_error = EBADF;
+		return;
+	}
+	total =(off_t)0;
+	uio->uio_resid = 0;
+	uio->uio_segflg = UIO_USERSPACE;
+	for	(iov = uio->uio_iov, i = 0; i < uio->uio_iovcnt; i++, iov++)
+		total += iov->iov_len;
+
+	uio->uio_resid = total;
+	if	(uio->uio_resid != total)	/* check wraparound */
+		return(u.u_error = EINVAL);
+
+	count = uio->uio_resid;
+	if	(setjmp(&u.u_qsave))
+		{
+/*
+ * The ONLY way we can get here is via the longjump in sleep.  Thus signals
+ * have been checked and u_error set accordingly.  If no bytes have been 
+ * transferred then all that needs to be done now is 'return'; the system 
+ * call will either be restarted or reported as interrupted.  If bytes have 
+ * been transferred then we need to calculate the number of bytes transferred.
+*/
+		if	(uio->uio_resid == count)
+			return;
+		else
+			u.u_error = 0;
+		}
+	else
+		u.u_error = (*Fops[fp->f_type]->fo_rw)(fp, uio);
+	u.u_r.r_val1 = count - uio->uio_resid;
+}
+
 /*
  * Read system call.
  */
@@ -123,52 +170,7 @@ writev()
 	rwuio(&auio);
 }
 
-static
-rwuio(uio)
-	register struct uio *uio;
-{
-	struct a {
-		int	fdes;
-	};
-	register struct file *fp;
-	register struct iovec *iov;
-	u_int i, count;
-	off_t	total;
 
-	GETF(fp, ((struct a *)u.u_ap)->fdes);
-	if ((fp->f_flag & (uio->uio_rw == UIO_READ ? FREAD : FWRITE)) == 0) {
-		u.u_error = EBADF;
-		return;
-	}
-	total =(off_t)0;
-	uio->uio_resid = 0;
-	uio->uio_segflg = UIO_USERSPACE;
-	for	(iov = uio->uio_iov, i = 0; i < uio->uio_iovcnt; i++, iov++)
-		total += iov->iov_len;
-
-	uio->uio_resid = total;
-	if	(uio->uio_resid != total)	/* check wraparound */
-		return(u.u_error = EINVAL);
-
-	count = uio->uio_resid;
-	if	(setjmp(&u.u_qsave))
-		{
-/*
- * The ONLY way we can get here is via the longjump in sleep.  Thus signals
- * have been checked and u_error set accordingly.  If no bytes have been 
- * transferred then all that needs to be done now is 'return'; the system 
- * call will either be restarted or reported as interrupted.  If bytes have 
- * been transferred then we need to calculate the number of bytes transferred.
-*/
-		if	(uio->uio_resid == count)
-			return;
-		else
-			u.u_error = 0;
-		}
-	else
-		u.u_error = (*Fops[fp->f_type]->fo_rw)(fp, uio);
-	u.u_r.r_val1 = count - uio->uio_resid;
-}
 
 /*
  * Ioctl system call
@@ -283,38 +285,6 @@ struct	pselect_args
 /*
  * Select system call.
 */
-int
-select()
-	{
-	struct uap
-		{
-		int	nd;
-		fd_set	*in, *ou, *ex;
-		struct	timeval *tv;
-		} *uap = (struct uap *)u.u_ap;
-	register struct pselect_args *pselargs = (struct pselect_args *)uap;
-
-	/*
-	 * Fake the 6th parameter of pselect.  See the comment below about the
-	 * number of parameters!
-	*/
-	pselargs->maskp = 0;
-	return(u.u_error = select1(pselargs, 0));
-	}
-
-/*
- * pselect (posix select)
- *
- * N.B.  There is only room for 6 arguments - see user.h - so pselect() is
- *       at the maximum!  See user.h
-*/
-int
-pselect()
-	{
-	register struct	pselect_args *uap = (struct pselect_args *)u.u_ap;
-
-	return(u.u_error = select1(uap, 1));
-	}
 
 /*
  * Select helper function common to both select() and pselect()
@@ -452,6 +422,41 @@ done:
 		}
 	return(error);
 	}
+
+
+int
+select()
+	{
+	struct uap
+		{
+		int	nd;
+		fd_set	*in, *ou, *ex;
+		struct	timeval *tv;
+		} *uap = (struct uap *)u.u_ap;
+	register struct pselect_args *pselargs = (struct pselect_args *)uap;
+
+	/*
+	 * Fake the 6th parameter of pselect.  See the comment below about the
+	 * number of parameters!
+	*/
+	pselargs->maskp = 0;
+	return(u.u_error = select1(pselargs, 0));
+	}
+
+/*
+ * pselect (posix select)
+ *
+ * N.B.  There is only room for 6 arguments - see user.h - so pselect() is
+ *       at the maximum!  See user.h
+*/
+int
+pselect()
+	{
+	register struct	pselect_args *uap = (struct pselect_args *)u.u_ap;
+
+	return(u.u_error = select1(uap, 1));
+	}
+
 
 selscan(ibits, obits, nfd, retval)
 	fd_set *ibits, *obits;
