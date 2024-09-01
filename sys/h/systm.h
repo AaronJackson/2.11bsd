@@ -36,8 +36,48 @@
  * patched by a stalking hacker.
  */
 extern int securelevel;		/* system security level */
-
 extern	char version[];		/* system version */
+
+#ifdef __riscv
+	extern int	nblkdev;
+	// Number of character switch entries.
+	extern int	nchrdev;
+	extern int	mpid;				/* generic for unique process id's */
+	extern char	runin;			/* scheduling flag */
+	extern char	runout;			/* scheduling flag */
+	extern int	runrun;				/* scheduling flag */
+	extern char	curpri;			/* more scheduling */
+	extern u_int	maxmem;			/* actual max memory per process */
+	extern u_int	nswap;			/* size of swap space */
+	extern int	updlock;			/* lock for sync */
+	extern daddr_t	rablock;		/* block to be read ahead */
+	extern dev_t	rootdev;		/* device of the root */
+	extern dev_t	dumpdev;		/* device to take dumps on */
+	extern long	dumplo;			/* offset into dumpdev */
+	extern dev_t	swapdev;		/* swapping device */
+	extern dev_t	pipedev;		/* pipe device */
+	int	nodev();			/* no device function used in bdevsw/cdevsw */
+	extern	int icode[];		/* user init code */
+	extern	int szicode;		/* its size */
+	daddr_t	bmap();
+	extern ubadr_t	clstaddr;		/* UNIBUS virtual address of clists */
+	extern int	cputype;	/* type of cpu = 40, 44, 45, 60, or 70 */
+
+	// Structure of the system-entry table
+	extern struct sysent {
+		char	sy_narg;		/* total number of arguments */
+		int	(*sy_call)();		/* handler */
+	} sysent[];
+
+	extern int	noproc;			/* no one is running just now */
+	extern char	*panicstr;
+	extern int	boothowto;		/* reboot flags, from boot */
+	extern int	selwait;
+	extern	bool_t	sep_id;		/* separate I/D */
+	extern	char	regloc[];	/* offsets of saved user registers (trap.c) */
+
+
+#else
 
 /*
  * Nblkdev is the number of entries (rows) in the block switch.
@@ -99,4 +139,7 @@ int	selwait;
 
 extern	bool_t	sep_id;		/* separate I/D */
 extern	char	regloc[];	/* offsets of saved user registers (trap.c) */
+//END SUPERVISOR
+#endif
+//END __riscv
 #endif
