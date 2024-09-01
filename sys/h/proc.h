@@ -93,13 +93,21 @@ struct	proc {
 #define	PIDHSZ		16
 #define	PIDHASH(pid)	((pid) & (PIDHSZ - 1))
 
-#if defined(KERNEL) && !defined(SUPERVISOR)
-struct	proc *pidhash[PIDHSZ];
-struct	proc *pfind();
-struct	proc proc[], *procNPROC;	/* the proc table itself */
-struct	proc *freeproc, *zombproc, *allproc, *qs;
-			/* lists of procs in various states */
-int	nproc;
+#ifdef __riscv
+	extern struct	proc *pidhash[PIDHSZ];
+	extern struct	proc *pfind();
+	extern struct	proc proc[], *procNPROC;	/* the proc table itself */
+	extern struct	proc *freeproc, *zombproc, *allproc, *qs;
+	extern int	nproc;
+#else
+	#if defined(KERNEL) && !defined(SUPERVISOR)
+	struct	proc *pidhash[PIDHSZ];
+	struct	proc *pfind();
+	struct	proc proc[], *procNPROC;	/* the proc table itself */
+	struct	proc *freeproc, *zombproc, *allproc, *qs;
+				/* lists of procs in various states */
+	int	nproc;
+	#endif
 #endif
 
 /* stat codes */
