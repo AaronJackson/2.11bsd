@@ -216,8 +216,13 @@ uint32_t mapinxxx(struct buf *bp) {
 }
 
 struct user u = {};
+'''
 
 
+RISCV_MACHINE_MIN = '''
+#include "param.h"
+#include "user.h"
+struct user u = {};
 '''
 
 
@@ -250,9 +255,16 @@ def c2o(file, out='/tmp/c2o.o', includes=None, defines=None, opt='-O0', bits=64 
 	return out
 
 
-def mkkernel(output='/tmp/two11bsd.elf', with_signals=False, with_fs=False, with_ufs=False, with_sync=False, with_clock=False, with_exec=False, with_socket=False, with_sysctl=False):
+def mkkernel(output='/tmp/two11bsd.elf', 
+		with_signals=False, with_fs=False, with_ufs=False, with_sync=False, with_clock=False, with_exec=False, 
+		with_socket=False, with_sysctl=False, with_tty=False, with_exit=False, with_subr=False, with_generic=False,
+		with_machdep=False, with_resource=False, with_log=False, with_sysent=False, with_malloc=False,
+		with_kern_accounting=False, ## "This module is a shadow of its former self. SHOULD REPLACE THIS WITH A DRIVER THAT CAN BE READ TO SIMPLIFY.""
+		with_kern_xxx=False,
+		):
 	defines = [
-		'KERNEL',
+		'KERNEL', 
+		#'SUPERVISOR',
 		'FREAD=0x01',
 		'FWRITE=0x10',
 		'O_FSYNC=0x0',
@@ -296,14 +308,24 @@ def mkkernel(output='/tmp/two11bsd.elf', with_signals=False, with_fs=False, with
 		print(name)
 		if not name.endswith('.c'): continue ## TODO parse tags
 
-		if not with_ufs and name.startswith( ('ufs_syscalls', 'ufs_bio', 'ufs_alloc', 'ufs_bmap', 'ufs_subr', 'ufs_namei', 'ufs_inode', 'ufs_mount', 'ufs_fio') ): continue
+		if not with_ufs and name.startswith( ('ufs_dsort','ufs_disksubr','ufs_syscalls', 'ufs_bio', 'ufs_alloc', 'ufs_bmap', 'ufs_subr', 'ufs_namei', 'ufs_inode', 'ufs_mount', 'ufs_fio') ): continue
 		if not with_sync and name.startswith( ('kern_sync', 'vm_sched') ): continue
-		if not with_clock and name.startswith('kern_clock'): continue
-		if not with_exec and name.startswith( ('kern_exec', 'kern_fork', 'sys_process', 'vm_proc') ): continue
-		if not with_socket and name.startswith( ('uipc_socket2', 'uipc_syscalls', 'sys_net', 'uipc_usrreq', 'uipc_proto') ): continue
+		if not with_clock and name.startswith( ('kern_clock', 'kern_time') ): continue
+		if not with_exec and name.startswith( ('kern_prot','kern_proc','kern_exec', 'kern_fork', 'sys_process', 'vm_proc', 'sys_pipe') ): continue
+		if not with_socket and name.startswith( ('sys_kern', 'uipc_socket2', 'uipc_syscalls', 'sys_net', 'uipc_usrreq', 'uipc_proto') ): continue
 		if not with_sysctl and name.startswith( 'kern_sysctl' ): continue
-		if not with_fs and name.startswith( ('sys_inode','vm_swp') ): continue
+		if not with_fs and name.startswith( ('vm_text','vfs_vnops','sys_inode','vm_swap', 'vm_swp', 'kern_descrip', 'quota_sys') ): continue
 		if not with_signals and name.startswith( 'kern_sig' ): continue
+		if not with_tty and name.startswith('tty'): continue
+		if not with_resource and name.startswith('kern_resource'): continue
+		if not with_log and name.startswith('subr_log'): continue
+		if not with_sysent and name.startswith('init_sysent'): continue
+		if not with_malloc and name.startswith('kern_mman'): continue
+		if not with_exit and name.startswith('kern_exit'): continue
+		if not with_generic and name.startswith('sys_generic'): continue
+		if not with_kern_accounting and name.startswith('kern_acct'): continue
+		if not with_kern_xxx and name.startswith('kern_xxx'): continue  ## defines reboot()
+		if not with_subr and 'subr' in name: continue
 
 		o = c2o(
 			os.path.join('./sys/sys', name), 
@@ -312,7 +334,7 @@ def mkkernel(output='/tmp/two11bsd.elf', with_signals=False, with_fs=False, with
 		obs.append(o)
 
 	rtmp = '/tmp/_riscv_.c'
-	open(rtmp,'w').write(RISCV_MACHINE)
+	open(rtmp,'w').write(RISCV_MACHINE_MIN)
 	o = c2o(
 		rtmp, 
 		out = '/tmp/_riscv_.o',
@@ -320,19 +342,21 @@ def mkkernel(output='/tmp/two11bsd.elf', with_signals=False, with_fs=False, with
 	obs.append(o)
 
 	macho = []
-	for name in 'machdep'.split():
-		o = c2o(
-			'./sys/machine/%s.c' % name, 
-			out = '/tmp/_riscv_%s.o' % name,
-			includes=includes, defines=defines, bits=32)
-		macho.append(o)
+	if with_machdep:
+		for name in 'machdep'.split():
+			o = c2o(
+				'./sys/machine/%s.c' % name, 
+				out = '/tmp/_riscv_%s.o' % name,
+				includes=includes, defines=defines, bits=32)
+			macho.append(o)
 
-	for name in 'param'.split():
-		o = c2o(
-			'./sys/CURLY/%s.c' % name, 
-			out = '/tmp/_riscv_%s.o' % name,
-			includes=includes, defines=defines, bits=32)
-		macho.append(o)
+	if False:
+		for name in 'param'.split():
+			o = c2o(
+				'./sys/CURLY/%s.c' % name, 
+				out = '/tmp/_riscv_%s.o' % name,
+				includes=includes, defines=defines, bits=32)
+			macho.append(o)
 
 
 
