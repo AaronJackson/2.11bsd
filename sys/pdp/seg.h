@@ -20,11 +20,17 @@
 #define TX	020		/* Software: text segment */
 #define ABS	040		/* Software: absolute address */
 
-#ifndef SUPERVISOR
-u_short	*ka6;			/* nonseparate:  KISA6; separate:  KDSA6 */
-u_int	kdsa6;			/* saved KDSA6, if any */
+#ifdef __riscv
+	#ifndef SUPERVISOR
+	extern u_short	*ka6;			/* nonseparate:  KISA6; separate:  KDSA6 */
+	extern u_int	kdsa6;			/* saved KDSA6, if any */
+	#endif
+#else
+	#ifndef SUPERVISOR
+	u_short	*ka6;			/* nonseparate:  KISA6; separate:  KDSA6 */
+	u_int	kdsa6;			/* saved KDSA6, if any */
+	#endif
 #endif
-
 /*
  * Addresses and bits for DEC's KT-11
  * and macros for remapping kernel data space.
