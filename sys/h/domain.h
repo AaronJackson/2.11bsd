@@ -25,9 +25,10 @@ struct	domain {
 	struct	domain *dom_next;
 };
 
-#ifdef SUPERVISOR
-struct	domain *domains;
-#endif
 #ifdef __riscv
-extern struct	domain *domains;
+	extern struct	domain *domains;
+#else
+	#ifdef SUPERVISOR
+		struct	domain *domains;
+	#endif
 #endif
