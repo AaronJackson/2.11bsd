@@ -38,9 +38,14 @@ struct	fileops {
 #define f_data		f_un.f_Data
 #define f_socket	f_un.f_Socket
 
-#ifndef SUPERVISOR
-extern struct	file file[], *fileNFILE;
-int	nfile;
+#ifdef __riscv
+	extern struct	file file[], *fileNFILE;
+	extern int	nfile;
+#else
+	#ifndef SUPERVISOR
+	extern struct	file file[], *fileNFILE;
+	int	nfile;
+	#endif
 #endif
 
 struct	file *getf();
