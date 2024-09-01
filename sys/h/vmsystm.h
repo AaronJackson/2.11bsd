@@ -7,20 +7,6 @@
  */
 
 /*
- * Miscellaneous virtual memory subsystem variables and structures.
- */
-
-size_t	freemem;		/* remaining clicks of free memory */
-
-#if defined(KERNEL) && defined(UCB_METER) && !defined(SUPERVISOR)
-u_short	avefree;		/* moving average of remaining free clicks */
-u_short	avefree30;		/* 30 sec (avefree is 5 sec) moving average */
-
-/* writable copies of tunables */
-int	maxslp;			/* max sleep time before very swappable */
-#endif
-
-/*
  * Fork/vfork accounting.
  */
 struct	forkstat
@@ -30,6 +16,31 @@ struct	forkstat
 	long	sizfork;
 	long	sizvfork;
 };
-#if defined(KERNEL) && defined(UCB_METER) && !defined(SUPERVISOR)
-struct	forkstat forkstat;
+
+/*
+ * Miscellaneous virtual memory subsystem variables and structures.
+ */
+
+#ifdef __riscv
+	extern size_t	freemem;		/* remaining clicks of free memory */
+	#if defined(KERNEL) && defined(UCB_METER) && !defined(SUPERVISOR)
+		extern u_short	avefree;		/* moving average of remaining free clicks */
+		extern u_short	avefree30;		/* 30 sec (avefree is 5 sec) moving average */
+		/* writable copies of tunables */
+		extern int	maxslp;			/* max sleep time before very swappable */
+	#endif
+	#if defined(KERNEL) && defined(UCB_METER) && !defined(SUPERVISOR)
+		extern struct	forkstat forkstat;
+	#endif
+#else
+	size_t	freemem;		/* remaining clicks of free memory */
+	#if defined(KERNEL) && defined(UCB_METER) && !defined(SUPERVISOR)
+		u_short	avefree;		/* moving average of remaining free clicks */
+		u_short	avefree30;		/* 30 sec (avefree is 5 sec) moving average */
+		/* writable copies of tunables */
+		int	maxslp;			/* max sleep time before very swappable */
+	#endif
+	#if defined(KERNEL) && defined(UCB_METER) && !defined(SUPERVISOR)
+		struct	forkstat forkstat;
+	#endif
 #endif
