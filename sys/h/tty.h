@@ -95,7 +95,12 @@ struct tty {
 #define	OBUFSIZ	100
 
 #if defined(KERNEL) && !defined(SUPERVISOR)
-short	tthiwat[NSPEEDS], ttlowat[NSPEEDS];
+#ifdef __riscv
+	extern short  tthiwat[NSPEEDS];
+	extern short  ttlowat[NSPEEDS];
+#else
+	short	tthiwat[NSPEEDS], ttlowat[NSPEEDS];
+#endif
 #define	TTHIWAT(tp)	tthiwat[(tp)->t_ospeed&TTMASK]
 #define	TTLOWAT(tp)	ttlowat[(tp)->t_ospeed&TTMASK]
 extern	struct ttychars ttydefaults;
