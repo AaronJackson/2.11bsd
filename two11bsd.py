@@ -222,7 +222,25 @@ struct user u = {};
 RISCV_MACHINE_MIN = '''
 #include "param.h"
 #include "user.h"
+#include "proc.h"
+int	cmask = CMASK;
+
 struct user u = {};
+void _start(){
+	struct proc *p;
+	p = &proc[0];
+	//p->p_addr = *ka6;
+	p->p_stat = SRUN;
+	p->p_flag |= SLOAD|SSYS;
+	p->p_nice = NZERO;
+
+	u.u_procp = p;			/* init user structure */
+	u.u_ap = u.u_arg;
+	u.u_cmask = cmask;
+	u.u_lastfile = -1;
+
+
+}
 '''
 
 
@@ -260,7 +278,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		with_socket=False, with_sysctl=False, with_tty=False, with_exit=False, with_subr=False, with_generic=False,
 		with_machdep=False, with_resource=False, with_log=False, with_sysent=False, with_malloc=False,
 		with_kern_accounting=False, ## "This module is a shadow of its former self. SHOULD REPLACE THIS WITH A DRIVER THAT CAN BE READ TO SIMPLIFY.""
-		with_kern_xxx=False,
+		with_kern_xxx=False, with_init_main=False,
 		):
 	defines = [
 		'KERNEL', 
@@ -326,6 +344,8 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		if not with_kern_accounting and name.startswith('kern_acct'): continue
 		if not with_kern_xxx and name.startswith('kern_xxx'): continue  ## defines reboot()
 		if not with_subr and 'subr' in name: continue
+		if not with_init_main and name.startswith('init_main'):
+			continue
 
 		o = c2o(
 			os.path.join('./sys/sys', name), 
@@ -358,8 +378,6 @@ def mkkernel(output='/tmp/two11bsd.elf',
 				includes=includes, defines=defines, bits=32)
 			macho.append(o)
 
-
-
 	if 'fedora' in os.uname().nodename:
 		cmd = ['riscv64-linux-gnu-ld']
 	else:
@@ -368,6 +386,24 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	cmd += ['-march=rv32', '-m', 'elf32lriscv', '-o', output] + obs + macho
 	print(cmd)
 	subprocess.check_call(cmd)
+
+	cmd = ['riscv64-linux-gnu-objdump', '-d', output]
+	print(cmd)
+	subprocess.check_call(cmd)
+
+	cmd = [
+		'qemu-system-riscv32',
+		'-M', 'virt',
+		'-m', 'size=1G',
+		'-serial', 'stdio',
+		'-device', 'VGA',
+		'--no-reboot',
+		'-bios', output,
+	]
+	print(cmd)
+	subprocess.check_call(cmd)
+
+	return output
 
 if __name__=='__main__':
 	mkkernel()
