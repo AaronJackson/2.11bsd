@@ -239,6 +239,15 @@ void _start(){
 	u.u_cmask = cmask;
 	u.u_lastfile = -1;
 
+#ifdef INET
+	if (netoff = netinit())
+		printf("netinit failed\n");
+	else
+		{
+		NETSETHZ();
+		NETSTART();
+		}
+#endif
 
 }
 '''
@@ -305,6 +314,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		'O_EXLOCK=0x0',
 		'O_SHLOCK=0x0',
 	]
+
 	includes = [
 		'./sys/h', 
 		'./include', 
@@ -316,6 +326,11 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	if not os.path.isdir('/tmp/bsd/sys'): os.mkdir('/tmp/bsd/sys')
 	if not os.path.isdir('/tmp/bsd/machine'): os.mkdir('/tmp/bsd/machine')
 	if not os.path.isdir('/tmp/bsd/netinet'): os.mkdir('/tmp/bsd/netinet')
+	if with_socket:
+		if not os.path.isdir('/tmp/bsd/net'): os.mkdir('/tmp/bsd/net')
+		os.system('cp -v ./sys/net/*.h /tmp/bsd/net/.')
+		defines.append('INET')
+
 
 	os.system('cp -v ./sys/h/*.h /tmp/bsd/sys/.')
 	os.system('cp -v ./sys/machine/*.h /tmp/bsd/machine/.')
@@ -406,4 +421,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	return output
 
 if __name__=='__main__':
-	mkkernel()
+	if '--inet' in sys.argv:
+		mkkernel(with_socket=True)
+	else:
+		mkkernel()
