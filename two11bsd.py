@@ -224,8 +224,9 @@ RISCV_MACHINE_MIN = '''
 #include "user.h"
 #include "proc.h"
 int	cmask = CMASK;
-
+int	netoff = 1;
 struct user u = {};
+
 void _start(){
 	struct proc *p;
 	p = &proc[0];
@@ -241,15 +242,38 @@ void _start(){
 
 #ifdef INET
 	if (netoff = netinit())
-		printf("netinit failed\n");
+		printf("netinit failed\\n");
 	else
 		{
+		#define hz 100
 		NETSETHZ();
 		NETSTART();
 		}
 #endif
 
 }
+
+/*
+ * SKcall(func, nbytes, a1, ..., aN)
+ *
+ * C-call from supervisor to kernel.
+ * Calls func(a1, ..., aN) in kernel mode.
+*/
+
+void SKcall(void *func, int nbytes, ...){
+	//TODO
+}
+
+/*
+ * KScall(func, nbytes, a1, ..., aN)
+ *
+ * C-call from kernel to supervisor.
+ * Calls func(a1, ..., aN) in supervisor mode.
+*/
+void KScall(void *func, int nbytes, ...){
+	//TODO
+}
+
 '''
 
 
@@ -362,10 +386,18 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		if not with_init_main and name.startswith('init_main'):
 			continue
 
+		if name.startswith('uipc_'):
+			defs = list(defines)
+			defs.append('SUPERVISOR')
+			#if name != 'uipc_usrreq.c':
+			#	defs.remove('KERNEL')
+		else:
+			defs = defines
+
 		o = c2o(
 			os.path.join('./sys/sys', name), 
 			out = '/tmp/%s.o' % name,
-			includes=includes, defines=defines, bits=32)
+			includes=includes, defines=defs, bits=32)
 		obs.append(o)
 
 	rtmp = '/tmp/_riscv_.c'
