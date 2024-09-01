@@ -21,6 +21,73 @@
 
 static	int	copen();
 
+struct inode *getinode(int fdes) {
+	register struct file *fp;
+	if ((unsigned)fdes >= NOFILE || (fp = u.u_ofile[fdes]) == NULL) {
+		u.u_error = EBADF;
+		return ((struct inode *)0);
+	}
+	if (fp->f_type != DTYPE_INODE) {
+		u.u_error = EINVAL;
+		return ((struct inode *)0);
+	}
+	return((struct inode *)fp->f_data);
+}
+
+/*
+ * Make a new file.
+ */
+struct inode *maknode(int mode, register struct nameidata *ndp) {
+	register struct inode *ip;
+	register struct inode *pdir = ndp->ni_pdir;
+#ifdef	QUOTA
+	struct	dquot	**xdq;
+#endif
+
+	ip = ialloc(pdir);
+	if (ip == NULL) {
+		iput(pdir);
+		return (NULL);
+	}
+#ifdef QUOTA
+	QUOTAMAP();
+	xdq = &ix_dquot[ip - inode];
+	if (*xdq != NODQUOT)
+		panic("maknode");
+#endif
+	ip->i_flag |= IACC|IUPD|ICHG;
+	if ((mode & IFMT) == 0)
+		mode |= IFREG;
+	ip->i_mode = mode & ~u.u_cmask;
+	ip->i_nlink = 1;
+	ip->i_uid = u.u_uid;
+	ip->i_gid = pdir->i_gid;
+	if (ip->i_mode & ISGID && !groupmember(ip->i_gid))
+		ip->i_mode &= ~ISGID;
+#ifdef QUOTA
+	*xdq = inoquota(ip);
+	QUOTAUNMAP();
+#endif
+
+	/*
+	 * Make sure inode goes to disk before directory entry.
+	 */
+	iupdat(ip, &time, &time, 1);
+	u.u_error = direnter(ip, ndp);
+	if (u.u_error) {
+		/*
+		 * Write error occurred trying to update directory
+		 * so must deallocate the inode.
+		 */
+		ip->i_nlink = 0;
+		ip->i_flag |= ICHG;
+		iput(ip);
+		return (NULL);
+	}
+	ndp->ni_ip = ip;
+	return (ip);
+}
+
 /*
  * Change current working directory (``.'').
  */
@@ -1078,63 +1145,6 @@ out:
 		u.u_error = error;
 }
 
-/*
- * Make a new file.
- */
-struct inode *
-maknode(mode, ndp)
-	int mode;
-register struct nameidata *ndp;
-{
-	register struct inode *ip;
-	register struct inode *pdir = ndp->ni_pdir;
-#ifdef	QUOTA
-	struct	dquot	**xdq;
-#endif
-
-	ip = ialloc(pdir);
-	if (ip == NULL) {
-		iput(pdir);
-		return (NULL);
-	}
-#ifdef QUOTA
-	QUOTAMAP();
-	xdq = &ix_dquot[ip - inode];
-	if (*xdq != NODQUOT)
-		panic("maknode");
-#endif
-	ip->i_flag |= IACC|IUPD|ICHG;
-	if ((mode & IFMT) == 0)
-		mode |= IFREG;
-	ip->i_mode = mode & ~u.u_cmask;
-	ip->i_nlink = 1;
-	ip->i_uid = u.u_uid;
-	ip->i_gid = pdir->i_gid;
-	if (ip->i_mode & ISGID && !groupmember(ip->i_gid))
-		ip->i_mode &= ~ISGID;
-#ifdef QUOTA
-	*xdq = inoquota(ip);
-	QUOTAUNMAP();
-#endif
-
-	/*
-	 * Make sure inode goes to disk before directory entry.
-	 */
-	iupdat(ip, &time, &time, 1);
-	u.u_error = direnter(ip, ndp);
-	if (u.u_error) {
-		/*
-		 * Write error occurred trying to update directory
-		 * so must deallocate the inode.
-		 */
-		ip->i_nlink = 0;
-		ip->i_flag |= ICHG;
-		iput(ip);
-		return (NULL);
-	}
-	ndp->ni_ip = ip;
-	return (ip);
-}
 
 /*
  * A virgin directory (no blushing please).
@@ -1342,19 +1352,4 @@ out:
 	iput(ip);
 }
 
-struct inode *
-getinode(fdes)
-	int fdes;
-{
-	register struct file *fp;
 
-	if ((unsigned)fdes >= NOFILE || (fp = u.u_ofile[fdes]) == NULL) {
-		u.u_error = EBADF;
-		return ((struct inode *)0);
-	}
-	if (fp->f_type != DTYPE_INODE) {
-		u.u_error = EINVAL;
-		return ((struct inode *)0);
-	}
-	return((struct inode *)fp->f_data);
-}
