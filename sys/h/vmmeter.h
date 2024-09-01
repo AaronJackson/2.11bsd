@@ -45,10 +45,7 @@ struct vmsum
 	long	v_swpin;	/* swapins */
 	long	v_swpout;	/* swapouts */
 };
-#if defined(KERNEL) && defined(UCB_METER) && !defined(SUPERVISOR)
-struct vmrate	cnt, rate;
-struct vmsum	sum;
-#endif
+
 
 /* systemwide totals computed every five seconds */
 struct vmtotal
@@ -67,6 +64,21 @@ struct vmtotal
 	size_t	t_armtxt;	/* active real memory used by text, clicks */
 	size_t	t_free;		/* free memory, kb */
 };
-#if defined(KERNEL) && !defined(SUPERVISOR)
-struct	vmtotal total;
+
+#ifdef __riscv
+	#if defined(KERNEL) && defined(UCB_METER) && !defined(SUPERVISOR)
+	extern struct vmrate	cnt, rate;
+	extern struct vmsum	sum;
+	#endif
+	#if defined(KERNEL) && !defined(SUPERVISOR)
+	extern struct	vmtotal total;
+	#endif
+#else
+	#if defined(KERNEL) && defined(UCB_METER) && !defined(SUPERVISOR)
+	struct vmrate	cnt, rate;
+	struct vmsum	sum;
+	#endif
+	#if defined(KERNEL) && !defined(SUPERVISOR)
+	struct	vmtotal total;
+	#endif
 #endif
