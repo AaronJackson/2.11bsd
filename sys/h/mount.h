@@ -102,6 +102,12 @@ struct	xmount
 #define	MNT_WAIT	1
 #define	MNT_NOWAIT	2
 
-#if defined(KERNEL) && !defined(SUPERVISOR)
-struct	mount mount[NMOUNT];
+#ifdef __riscv
+	#if defined(KERNEL) && !defined(SUPERVISOR)
+	extern struct	mount mount[NMOUNT];
+	#endif
+#else
+	#if defined(KERNEL) && !defined(SUPERVISOR)
+	struct	mount mount[NMOUNT];
+	#endif
 #endif
