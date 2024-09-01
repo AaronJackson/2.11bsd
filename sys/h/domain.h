@@ -28,3 +28,6 @@ struct	domain {
 #ifdef SUPERVISOR
 struct	domain *domains;
 #endif
+#ifdef __riscv
+extern struct	domain *domains;
+#endif
