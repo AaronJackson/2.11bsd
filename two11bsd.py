@@ -250,7 +250,7 @@ def c2o(file, out='/tmp/c2o.o', includes=None, defines=None, opt='-O0', bits=64 
 	return out
 
 
-def mkkernel(output='/tmp/two11bsd.elf'):
+def mkkernel(output='/tmp/two11bsd.elf', with_signals=False, with_fs=False, with_ufs=False, with_sync=False, with_clock=False, with_exec=False, with_socket=False, with_sysctl=False):
 	defines = [
 		'KERNEL',
 		'FREAD=0x01',
@@ -295,6 +295,16 @@ def mkkernel(output='/tmp/two11bsd.elf'):
 	for name in os.listdir('./sys/sys/'):
 		print(name)
 		if not name.endswith('.c'): continue ## TODO parse tags
+
+		if not with_ufs and name.startswith( ('ufs_syscalls', 'ufs_bio', 'ufs_alloc', 'ufs_bmap', 'ufs_subr', 'ufs_namei', 'ufs_inode', 'ufs_mount', 'ufs_fio') ): continue
+		if not with_sync and name.startswith( ('kern_sync', 'vm_sched') ): continue
+		if not with_clock and name.startswith('kern_clock'): continue
+		if not with_exec and name.startswith( ('kern_exec', 'kern_fork', 'sys_process', 'vm_proc') ): continue
+		if not with_socket and name.startswith( ('uipc_socket2', 'uipc_syscalls', 'sys_net', 'uipc_usrreq', 'uipc_proto') ): continue
+		if not with_sysctl and name.startswith( 'kern_sysctl' ): continue
+		if not with_fs and name.startswith( ('sys_inode','vm_swp') ): continue
+		if not with_signals and name.startswith( 'kern_sig' ): continue
+
 		o = c2o(
 			os.path.join('./sys/sys', name), 
 			out = '/tmp/%s.o' % name,
