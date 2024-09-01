@@ -3,9 +3,17 @@ import os, sys, subprocess
 
 RISCV_MACHINE = '''
 #include <stdint.h>
-#define size_t uint32_t
+#include "param.h"
+#include "../machine/seg.h"
+#include "../machine/iopage.h"
 
-struct user *u = 0;
+#include "dir.h"
+#include "inode.h"
+#include "user.h"
+#include "proc.h"
+#include "fs.h"
+#include "map.h"
+#include "buf.h"
 
 int copyin(const void *fromaddr, void *toaddr, size_t length) {
 	// Check for invalid addresses or lengths
@@ -53,6 +61,162 @@ int copyout(const void *fromaddr, void *toaddr, size_t length) {
 	return 0; // Success
 }
 
+int vcopyin(const void *fromaddr, void *toaddr, size_t length) {
+	// Check for invalid addresses or lengths
+	if (!fromaddr || !toaddr || length == 0) {
+		return -1;
+	}
+
+	// Handle the case where fromaddr, toaddr, or length is odd
+	if ((uintptr_t)fromaddr & 1 || (uintptr_t)toaddr & 1 || length & 1) {
+		// Handle individual bytes or half-words as needed
+		while (length > 0) {
+			if (length >= 2) {
+				// Copy a half-word (16 bits)
+				uint16_t half_word = *((uint16_t *)fromaddr);
+				*((uint16_t *)toaddr) = half_word;
+				fromaddr += 2;
+				toaddr += 2;
+				length -= 2;
+			} else {
+				// Copy a single byte
+				uint8_t byte = *((uint8_t *)fromaddr);
+				*((uint8_t *)toaddr) = byte;
+				fromaddr += 1;
+				toaddr += 1;
+				length -= 1;
+			}
+		}
+	}
+
+	// Calculate the number of 32-bit words to copy
+	size_t num_words = length / sizeof(uint32_t);
+
+	// Copy 32-bit words using a loop
+	for (size_t i = 0; i < num_words; ++i) {
+		uint32_t word = *((uint32_t *)fromaddr + i);
+		*((uint32_t *)toaddr + i) = word;
+	}
+
+	// Handle any remaining bytes
+	size_t remaining_bytes = length % sizeof(uint32_t);
+	if (remaining_bytes > 0) {
+		const uint8_t *src_bytes = (const uint8_t *)fromaddr + (num_words * sizeof(uint32_t));
+		uint8_t *dst_bytes = (uint8_t *)toaddr + (num_words * sizeof(uint32_t));
+
+		for (size_t i = 0; i < remaining_bytes; ++i) {
+			dst_bytes[i] = src_bytes[i];
+		}
+	}
+	return 0; // Success
+}
+
+int vcopyout(const void *fromaddr, void *toaddr, size_t length) {
+	// Check for invalid addresses or lengths
+	if (!fromaddr || !toaddr || length == 0) {
+		return -1;
+	}
+
+	// Handle the case where fromaddr, toaddr, or length is odd
+	if ((uintptr_t)fromaddr & 1 || (uintptr_t)toaddr & 1 || length & 1) {
+		// Implement the logic for copying individual bytes or half-words as needed
+		while (length > 0) {
+			if (length >= 2) {
+				// Copy a half-word (16 bits)
+				uint16_t half_word = *((uint16_t *)fromaddr);
+				*((uint16_t *)toaddr) = half_word;
+				fromaddr += 2;
+				toaddr += 2;
+				length -= 2;
+			} else {
+				// Copy a single byte
+				uint8_t byte = *((uint8_t *)fromaddr);
+				*((uint8_t *)toaddr) = byte;
+				fromaddr += 1;
+				toaddr += 1;
+				length -= 1;
+			}
+		}
+	}
+
+	// Calculate the number of 32-bit words to copy
+	size_t num_words = length / sizeof(uint32_t);
+
+	// Copy 32-bit words using a loop
+	for (size_t i = 0; i < num_words; ++i) {
+		uint32_t word = *((uint32_t *)fromaddr + i);
+		*((uint32_t *)toaddr + i) = word;
+	}
+
+	// Handle any remaining bytes
+	size_t remaining_bytes = length % sizeof(uint32_t);
+	if (remaining_bytes > 0) {
+		const uint8_t *src_bytes = (const uint8_t *)fromaddr + (num_words * sizeof(uint32_t));
+		uint8_t *dst_bytes = (uint8_t *)toaddr + (num_words * sizeof(uint32_t));
+
+		for (size_t i = 0; i < remaining_bytes; ++i) {
+			dst_bytes[i] = src_bytes[i];
+		}
+	}
+
+	return 0; // Success
+}
+
+int copystr(const char *fromaddr, char *toaddr, size_t maxlength, size_t *lencopied) {
+	// Check for invalid addresses or maxlength
+	if (!fromaddr || !toaddr || maxlength == 0) {
+		return -1;
+	}
+
+	// Copy characters until a null terminator or maxlength is reached
+	size_t copied = 0;
+	while (copied < maxlength) {
+		char c = *fromaddr++;
+		if (c == '\0') {
+			break;
+		}
+		*toaddr++ = c;
+		copied++;
+	}
+
+	// Check if maxlength was exceeded
+	if (copied == maxlength && *fromaddr != '\0') {
+		return -1;
+	}
+
+	// Update lencopied if provided
+	if (lencopied != NULL) {
+		*lencopied = copied + 1; // Include the null terminator
+	}
+
+	return 0; // Success
+}
+
+
+//#define DEV_BSIZE 512
+//#define RW 0x03
+// The default value of 0x80000000 is a typical starting address for user-level virtual memory segments. 
+#define SEG5 0x80000000
+#define VIRTUAL_BASE 0x80000000 // Example virtual base address
+
+/*
+void mapseg5(uint16_t paddr, uint16_t flags) {
+	// Calculate the virtual address
+	uint32_t vaddr = VIRTUAL_BASE + (paddr & 0xFFFF0000);
+	// Write the physical address to the virtual address
+	*((uint32_t *)vaddr) = paddr;
+}
+*/
+
+uint32_t mapinxxx(struct buf *bp) {
+	uint32_t offset = bp->b_bcount & 077;
+	uint32_t paddr = bftopaddr(bp);
+	mapseg5((uint16_t)paddr, (uint16_t)(((uint32_t)DEV_BSIZE << 2) | (uint32_t)RW));
+	return (SEG5 + offset);
+}
+
+struct user u = {};
+
 
 '''
 
@@ -64,7 +228,7 @@ def c2o(file, out='/tmp/c2o.o', includes=None, defines=None, opt='-O0', bits=64 
 		cmd = ['riscv64-unknown-elf-gcc']
 
 	if bits==32:
-		cmd.append('-march=rv32i')
+		cmd.append('-march=rv32imac')
 		cmd.append('-mabi=ilp32')
 
 	cmd += [
@@ -152,6 +316,15 @@ def mkkernel(output='/tmp/two11bsd.elf'):
 			out = '/tmp/_riscv_%s.o' % name,
 			includes=includes, defines=defines, bits=32)
 		macho.append(o)
+
+	for name in 'param'.split():
+		o = c2o(
+			'./sys/CURLY/%s.c' % name, 
+			out = '/tmp/_riscv_%s.o' % name,
+			includes=includes, defines=defines, bits=32)
+		macho.append(o)
+
+
 
 	if 'fedora' in os.uname().nodename:
 		cmd = ['riscv64-linux-gnu-ld']
