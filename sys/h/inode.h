@@ -140,39 +140,46 @@ struct dinode {
 #define	di_ctime	di_ic2.ic_ctime
 
 #if defined(KERNEL) && !defined(SUPERVISOR)
-/*
- * Invalidate an inode. Used by the namei cache to detect stale
- * information. In order to save space and also reduce somewhat the
- * overhead - the i_id field is made into a u_short.  If a pdp-11 can 
- * invalidate 100 inodes per second, the cache will have to be invalidated 
- * in about 11 minutes.  Ha!
- * Assumes the cacheinvalall routine will map the namei cache.
- */
-#define cacheinvalall _cinvall
+	/*
+	 * Invalidate an inode. Used by the namei cache to detect stale
+	 * information. In order to save space and also reduce somewhat the
+	 * overhead - the i_id field is made into a u_short.  If a pdp-11 can 
+	 * invalidate 100 inodes per second, the cache will have to be invalidated 
+	 * in about 11 minutes.  Ha!
+	 * Assumes the cacheinvalall routine will map the namei cache.
+	 */
+	#define cacheinvalall _cinvall
 
-#define cacheinval(ip) \
-	(ip)->i_id = ++nextinodeid; \
-	if (nextinodeid == 0) \
-		cacheinvalall();
+	#define cacheinval(ip) \
+		(ip)->i_id = ++nextinodeid; \
+		if (nextinodeid == 0) \
+			cacheinvalall();
 
-u_short	nextinodeid;		/* unique id generator */
+	u_short	nextinodeid;		/* unique id generator */
 
-#ifdef EXTERNALITIMES
-memaddr	xitimes;
-u_int	xitdesc;
-#endif
-struct inode inode[];		/* the inode table itself */
-struct inode *inodeNINODE;	/* the end of the inode table */
-int	ninode;			/* the number of slots in the table */
+	#ifdef EXTERNALITIMES
+		memaddr	xitimes;
+		u_int	xitdesc;
+	#endif
 
-struct	inode *rootdir;			/* pointer to inode of root directory */
+	#ifdef __riscv
+		extern struct inode inode[];		/* the inode table itself */
+		extern struct inode *inodeNINODE;	/* the end of the inode table */
+		extern int	ninode;					/* the number of slots in the table */
+		extern struct	inode *rootdir;		/* pointer to inode of root directory */
 
-struct	inode *getinode();
-struct	inode *ialloc();
-struct	inode *iget();
-struct	inode *owner();
-struct	inode *maknode();
-struct	inode *namei();
+	#else
+		struct inode inode[];		/* the inode table itself */
+		struct inode *inodeNINODE;	/* the end of the inode table */
+		int	ninode;					/* the number of slots in the table */
+		struct	inode *rootdir;		/* pointer to inode of root directory */
+		struct	inode *getinode();
+		struct	inode *ialloc();
+		struct	inode *iget();
+		struct	inode *owner();
+		struct	inode *maknode();
+		struct	inode *namei();
+	#endif
 #endif
 
 /* i_flag */
