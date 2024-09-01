@@ -29,9 +29,16 @@ struct text
 	char	dummy;		/* room for one more */
 };
 
-#if defined(KERNEL) && !defined(SUPERVISOR)
-extern struct	text text[], *textNTEXT;
-int	ntext;
+#ifdef __riscv
+	#if defined(KERNEL) && !defined(SUPERVISOR)
+	extern struct	text text[], *textNTEXT;
+	extern int	ntext;
+	#endif
+#else
+	#if defined(KERNEL) && !defined(SUPERVISOR)
+	extern struct	text text[], *textNTEXT;
+	int	ntext;
+	#endif
 #endif
 
 #define	XTRC	0x01		/* Text may be written, exclusive use */
