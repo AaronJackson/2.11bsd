@@ -113,16 +113,29 @@ struct mbstat {
 	u_short	m_mtypes[NMBTYPES];	/* type specific mbuf allocations */
 };
 
-#ifdef	SUPERVISOR
-extern	struct	mbuf *mbutl;		/* virtual address of net free mem */
-struct	mbstat mbstat;
-int	nmbclusters;
-struct	mbuf *mfree, *mclfree;
-char	mclrefcnt[NMBCLUSTERS + 1];
-int	m_want;
-struct	mbuf *m_get(),*m_getclr(),*m_free(),*m_more(),*m_copy(),*m_pullup();
-#ifndef	pdp11
-caddr_t	m_clalloc();
+#ifdef __riscv
+	extern	struct	mbuf *mbutl;		/* virtual address of net free mem */
+	extern struct	mbstat mbstat;
+	extern int	nmbclusters;
+	extern struct  mbuf *mfree;
+	extern struct  mbuf *mclfree;
+	extern char	mclrefcnt[NMBCLUSTERS + 1];
+	extern int	m_want;
+	extern struct	mbuf *m_get(),*m_getclr(),*m_free(),*m_more(),*m_copy(),*m_pullup();
+	//extern caddr_t	m_clalloc();
+
+#else
+	#ifdef	SUPERVISOR
+	extern	struct	mbuf *mbutl;		/* virtual address of net free mem */
+	struct	mbstat mbstat;
+	int	nmbclusters;
+	struct	mbuf *mfree, *mclfree;
+	char	mclrefcnt[NMBCLUSTERS + 1];
+	int	m_want;
+	struct	mbuf *m_get(),*m_getclr(),*m_free(),*m_more(),*m_copy(),*m_pullup();
+	#ifndef	pdp11
+	caddr_t	m_clalloc();
+	#endif
 #endif
 
 #define	MGET(m, i, t) \
