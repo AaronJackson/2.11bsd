@@ -26,6 +26,26 @@ typedef signed long i64;
 typedef u32 size_t;
 '''
 
+ARCH_ASM = '''
+#define readu8(addr) (*(const u8 *)(addr))
+#define readu16(addr) (*(const u16 *)(addr))
+#define readu32(addr) (*(const u32 *)(addr))
+#define readu64(addr) (*(const u64 *)(addr))
+#define writeu8(addr, val) (*(u8 *)(addr) = (val))
+#define writeu16(addr, val) (*(u16 *)(addr) = (val))
+#define writeu32(addr, val) (*(u32 *)(addr) = (val))
+#define writeu64(addr, val) (*(u64 *)(addr) = (val))
+
+static inline void csrw_mtvec(const volatile u64 val) { asm volatile("csrw mtvec,%0" :: "r"(val)); }
+static inline void csrw_mie(const volatile u64 val) { asm volatile("csrw mie,%0" :: "r"(val)); }
+static inline void csrs_mstatus(const volatile u64 val) { asm volatile("csrs mstatus,%0" :: "r"(val)); }
+static inline u64 csrr_mcause(){
+  volatile u64 val;
+  asm volatile("csrr %0,mcause" : "=r"(val) :);
+  return val;
+}
+'''
+
 UART = '''
 #define UART_BASE 0x10000000
 #define UART_RBR_OFFSET 0  /* In:  Recieve Buffer Register */
@@ -81,6 +101,12 @@ void *memcpy(void *dest, const void *src, size_t n){
 #define VRAM ((volatile u8 *)0x50000000)
 void putpixel(int x, int y, char c){
 	VRAM[y*320 + x] = c;
+}
+
+void clear_screen(char c){
+	for (int i=0; i<320*240; i++){
+		VRAM[i]=c;
+	}
 }
 '''
 
@@ -155,11 +181,33 @@ VGA_S = r'''
 START_VGA_S = f'''
 .text
 .global _start
+
+UART_BASE = 0x10000000
+UART_THR_OFFSET = 0
+
 _start:
-  bne a0, x0, _start # loop if hartid is not 0
-  li sp, 0x80200000 # setup stack pointer
-  {VGA_S}
-  j firmware_main # jump to c entry
+	bne a0, x0, _start # loop if hartid is not 0
+
+	li gp, UART_BASE
+	li t0, 'B'
+	sb t0, UART_THR_OFFSET(gp)
+	li t0, 'S'
+	sb t0, UART_THR_OFFSET(gp)
+	li t0, 'D'
+	sb t0, UART_THR_OFFSET(gp)
+
+	li sp, 0x80200000 # setup stack pointer
+	{VGA_S}
+	j firmware_main # jump to c entry
+'''
+
+KLIB_ASM = '''
+.global putc
+putc:
+	li gp, UART_BASE
+	sb a0, UART_THR_OFFSET(gp)
+	ret
+
 '''
 
 MODE_13H = '''
@@ -527,12 +575,19 @@ struct  mbuf *mclfree;
 
 
 void firmware_main(){
+	clear_screen(1);
 	putpixel(10,10,100);
 	putpixel(10,11,100);
 	uart_init();
 	putpixel(11,11,10);
 	putpixel(12,12,32);
+	putc('!');
+	putc('!');
+	putc('!');
 	uart_print("hello 2.11BSD\\n");
+
+	//$MAGIC
+
 	struct proc *p;
 	//p = &proc[0];
 	//p->p_addr = *ka6;
@@ -591,9 +646,17 @@ def c2o(file, out='/tmp/c2o.o', includes=None, defines=None, opt='-O0', bits=64 
 	if bits==32:
 		cmd.append('-march=rv32imac')
 		cmd.append('-mabi=ilp32')
+	else:
+		cmd.append('-fno-PIC')
+		cmd.append('-march=rv64g')
+		cmd.append('-mabi=lp64')
 
 	cmd += [
-		'-c', '-mcmodel=medany', '-fomit-frame-pointer', '-ffunction-sections',
+		'-c', 
+		'-mcmodel=medany', 
+		#'-mcmodel=medlow',
+		'-fomit-frame-pointer', 
+		'-ffunction-sections',
 		'-ffreestanding', '-nostdlib', '-nostartfiles', '-nodefaultlibs', 
 		opt, '-g', '-o', out, file
 	]
@@ -711,10 +774,16 @@ def mkkernel(output='/tmp/two11bsd.elf',
 
 	defines.append('SUPERVISOR')
 	rtmp = '/tmp/_riscv_.c'
-	C = [ARCH, UART, LIBC, RISCV_MACHINE_MIN]
+	C = [ARCH, ARCH_ASM, UART, LIBC]
+	if '--test-draw' in sys.argv:
+		C.append( text2c('hello world') )
+		c = 'draw_hello_world(0,0,10);'
+		C.append(RISCV_MACHINE_MIN.replace('//$MAGIC', c))
+	else:
+		C.append(RISCV_MACHINE_MIN)
 
-	if with_tty:
-		C.append(KLIB_TTY)
+	#if with_tty:
+	#	C.append(KLIB_TTY)
 	if not with_ufs and with_socket:
 		C.append(KLIB_NAMEI)
 
@@ -745,7 +814,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	if vga:
 		tmps = '/tmp/__bsd_vga__.s'
 		asm = [
-			START_VGA_S,
+			START_VGA_S, KLIB_ASM,
 			#gen_trap_s(),
 			'.section .rodata', 
 			MODE_13H, gen_pal()
@@ -761,11 +830,13 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		cmd = ['riscv64-unknown-elf-ld']
 
 	if allow_unresolved:
-		cmd.append('--unresolved-symbols=ignore-in-object-files')
+		#cmd.append('--unresolved-symbols=ignore-in-object-files')
+		cmd.append('--unresolved-symbols=ignore-all')
+		cmd.append('-defsym=pfind=0x0')
 
 	tmpld = '/tmp/linker.ld'
 	open(tmpld,'wb').write(LINKER_SCRIPT.encode('utf-8'))
-	cmd += ['-T',tmpld]
+	cmd += ['-T',tmpld, '--no-relax', '-static']
 
 	if bits==32:
 		cmd += ['-march=rv32', '-m', 'elf32lriscv', '-o', output] + obs + macho
@@ -850,6 +921,25 @@ def mkkernel(output='/tmp/two11bsd.elf',
 
 
 	return output
+
+def text2c( text ):
+	from PIL import Image, ImageDraw, ImageFont
+	canvas = Image.new('RGBA', (320,200))
+	draw = ImageDraw.Draw(canvas)
+	monospace = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf", 6)
+	draw.text((10, 10), text, font=monospace)
+	out = ['void draw_%s(int x, int y, char c){' % text.replace(' ','_') ]
+	for y in range(200):
+		for x in range(320):
+			pix = canvas.getpixel((x,y))
+			if any(pix):
+				#print(pix)
+				r,g,b,a = pix
+				if a > 32:
+					out.append('	putpixel(x+%s, y+%s, c);' % (x,y))
+
+	out.append('}')
+	return '\n'.join(out)
 
 if __name__=='__main__':
 	if '--inet' in sys.argv:
