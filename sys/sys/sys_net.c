@@ -209,6 +209,18 @@ netstart()
 	splx(s);
 }
 
+netcopyout(m, to, len)
+	struct mbuf *m;
+	char *to;
+	int *len;
+{
+	if (*len > m->m_len)
+		*len = m->m_len;
+	return(copyout(mtod(m, caddr_t), to, *len));
+}
+
+
+#ifndef __riscv
 /*
  * Panic is called on fatal errors.  It prints "net panic: mesg" and
  * then calls the kernel entry netcrash() to bring down the net.
@@ -221,15 +233,6 @@ panic(s)
 	/* NOTREACHED */
 }
 
-netcopyout(m, to, len)
-	struct mbuf *m;
-	char *to;
-	int *len;
-{
-	if (*len > m->m_len)
-		*len = m->m_len;
-	return(copyout(mtod(m, caddr_t), to, *len));
-}
 
 /*
  * These routines are copies of various kernel routines that are required in
@@ -517,3 +520,5 @@ _pchar(c, flg)
 	return(SKcall(putchar, sizeof(int)+sizeof(int)+sizeof(struct tty *),
 		 c, flg, (struct tty *)0));
 	}
+
+#endif
