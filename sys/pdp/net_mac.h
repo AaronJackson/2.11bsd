@@ -75,7 +75,9 @@ int netstart();
 #define	NETSTART() \
 	KScall(netstart, 0)
 
-int putc();
+#ifndef __riscv
+	int putc();
+#endif
 #define	PUTC(c, p) \
 	SKcall(putc, sizeof(int) + sizeof(struct clist *), c, p)
 
