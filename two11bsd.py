@@ -606,6 +606,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		with_kern_xxx=False, with_init_main=False,
 		allow_unresolved=False, vga=False, 
 		gdb='--gdb' in sys.argv or '--gdb-step' in sys.argv,
+		bits=32,
 		):
 	defines = [
 		'KERNEL', 
@@ -691,7 +692,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		o = c2o(
 			os.path.join('./sys/sys', name), 
 			out = '/tmp/%s.o' % name,
-			includes=includes, defines=defs, bits=32)
+			includes=includes, defines=defs, bits=bits)
 		obs.append(o)
 
 
@@ -706,7 +707,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	o = c2o(
 		rtmp, 
 		out = '/tmp/_riscv_.o',
-		includes=includes, defines=defines, bits=32)
+		includes=includes, defines=defines, bits=bits)
 	obs.append(o)
 
 	macho = []
@@ -715,7 +716,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 			o = c2o(
 				'./sys/machine/%s.c' % name, 
 				out = '/tmp/_riscv_%s.o' % name,
-				includes=includes, defines=defines, bits=32)
+				includes=includes, defines=defines, bits=bits)
 			macho.append(o)
 
 	if False:
@@ -723,7 +724,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 			o = c2o(
 				'./sys/CURLY/%s.c' % name, 
 				out = '/tmp/_riscv_%s.o' % name,
-				includes=includes, defines=defines, bits=32)
+				includes=includes, defines=defines, bits=bits)
 			macho.append(o)
 
 	if vga:
@@ -735,7 +736,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 			MODE_13H, gen_pal()
 		]
 		open(tmps,'wb').write('\n'.join(asm).encode('utf-8'))
-		o = c2o(tmps, out='/tmp/libbsd_vga.o', bits=32)
+		o = c2o(tmps, out='/tmp/libbsd_vga.o', bits=bits)
 		macho.append(o)
 
 
@@ -751,8 +752,10 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	open(tmpld,'wb').write(LINKER_SCRIPT.encode('utf-8'))
 	cmd += ['-T',tmpld]
 
-
-	cmd += ['-march=rv32', '-m', 'elf32lriscv', '-o', output] + obs + macho
+	if bits==32:
+		cmd += ['-march=rv32', '-m', 'elf32lriscv', '-o', output] + obs + macho
+	else:
+		cmd += ['-march=rv64', '-m', 'elf64lriscv', '-o', output] + obs + macho
 	print(cmd)
 	subprocess.check_call(cmd)
 
@@ -760,8 +763,10 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	print(cmd)
 	subprocess.check_call(cmd)
 
+	if bits==32: q = 'qemu-system-riscv32'
+	else: q = 'qemu-system-riscv64'
 	cmd = [
-		'qemu-system-riscv32',
+		q,
 		'-M', 'virt',
 		'-m', 'size=1G',
 		'-serial', 'stdio',
@@ -788,7 +793,10 @@ def mkkernel(output='/tmp/two11bsd.elf',
 			cmd = ['xterm', '-hold', '-e', ' '.join(cmd)]
 
 		gdb_script = []
-		gdb_script.append('set architecture riscv:rv32')
+		if bits==32:
+			gdb_script.append('set architecture riscv:rv32')
+		else:
+			gdb_script.append('set architecture riscv:rv64')
 		gdb_script += [
 			'target remote :1234',
 			'info registers',
@@ -848,7 +856,7 @@ if __name__=='__main__':
 	elif '--vga' in sys.argv:
 		mkkernel(
 			with_socket=True, with_tty=True, with_clock=True, with_sync=True, with_signals=True, with_ufs=True,
-			allow_unresolved=True, vga=True,
+			allow_unresolved=True, vga=True, bits=64,
 		)
 	else:
 		mkkernel()
