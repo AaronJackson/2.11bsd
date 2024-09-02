@@ -244,6 +244,19 @@ def gen_pal():
 	]
 	return '\n'.join(asm)
 
+KLIB_TTY = '''
+int putc(u8 ch){ set_reg(UART_THR_OFFSET, ch);}
+int spltty(){ return 0; }
+char getc() { return 0; }
+int unputc() {}
+int catq() {}
+int bzero() {}
+int bcopy() {}
+int b_to_q() {}
+int ureadc() {}
+int nextc() {}
+int panic() {}
+'''
 
 KLIB_NAMEI = '''
 /*
@@ -700,6 +713,8 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	rtmp = '/tmp/_riscv_.c'
 	C = [ARCH, UART, LIBC, RISCV_MACHINE_MIN]
 
+	if with_tty:
+		C.append(KLIB_TTY)
 	if not with_ufs and with_socket:
 		C.append(KLIB_NAMEI)
 
@@ -854,9 +869,11 @@ if __name__=='__main__':
 			with_kern_xxx=True, with_init_main=True,
 		)
 	elif '--vga' in sys.argv:
+		bits = 32
+		if '--bits64' in sys.argv: bits = 64
 		mkkernel(
 			with_socket=True, with_tty=True, with_clock=True, with_sync=True, with_signals=True, with_ufs=True,
-			allow_unresolved=True, vga=True, bits=64,
+			allow_unresolved=True, vga=True, bits=bits,
 		)
 	else:
 		mkkernel()
