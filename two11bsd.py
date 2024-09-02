@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # 2.11BSD RISC-V: BrentHarts 2024
-import os, sys, subprocess
+import os, sys, subprocess, atexit
 
 LINKER_SCRIPT = '''
 ENTRY(_start)
@@ -514,10 +514,11 @@ struct  mbuf *mclfree;
 
 
 void firmware_main(){
-	putpixel(0,0,100);
-	putpixel(1,1,10);
-	putpixel(2,2,32);
+	putpixel(10,10,100);
+	putpixel(10,11,100);
 	uart_init();
+	putpixel(11,11,10);
+	putpixel(12,12,32);
 	uart_print("hello 2.11BSD\\n");
 	struct proc *p;
 	//p = &proc[0];
@@ -603,7 +604,8 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		with_machdep=False, with_resource=False, with_log=False, with_sysent=False, with_malloc=False,
 		with_kern_accounting=False, ## "This module is a shadow of its former self. SHOULD REPLACE THIS WITH A DRIVER THAT CAN BE READ TO SIMPLIFY.""
 		with_kern_xxx=False, with_init_main=False,
-		allow_unresolved=False, vga=False,
+		allow_unresolved=False, vga=False, 
+		gdb='--gdb' in sys.argv or '--gdb-step' in sys.argv,
 		):
 	defines = [
 		'KERNEL', 
@@ -768,7 +770,61 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		'-bios', output,
 	]
 	print(cmd)
-	subprocess.check_call(cmd)
+	if gdb:
+		cmd += ['-S','-gdb', 'tcp:localhost:1234,server,ipv4']
+		print(cmd)
+		proc = subprocess.Popen(cmd)
+		atexit.register(lambda:proc.kill())
+	else:
+		print(cmd)
+		subprocess.check_call(cmd)
+
+	if gdb:
+		cmd = ['gdb-multiarch', '--batch', '--command=/tmp/debug_bsd.gdb', output]
+
+		if os.path.isfile('/usr/bin/konsole'):
+			cmd = ['konsole', '--separate', '--hold', '-e', ' '.join(cmd)]
+		else:
+			cmd = ['xterm', '-hold', '-e', ' '.join(cmd)]
+
+		gdb_script = []
+		gdb_script.append('set architecture riscv:rv32')
+		gdb_script += [
+			'target remote :1234',
+			'info registers',
+		]
+
+
+		if '--gdb-step' in sys.argv:
+			step1 = 10
+			step2 = 1
+			for aidx, arg in enumerate(sys.argv):
+				if arg=='--gdb-step':
+					try:
+						step1 = int(sys.argv[aidx+1])
+						step2 = int(sys.argv[aidx+2])
+					except: pass
+			for i in range(step1):
+				gdb_script += [
+					"echo '----------------------'",
+					'echo',
+					'bt',
+					'stepi %s' % step2,
+					'info registers',
+				]
+			gdb_script.append('continue')
+
+		else:
+			gdb_script += [
+			'continue',
+			'info registers',
+			'bt',
+			]
+
+		open('/tmp/debug_bsd.gdb', 'wb').write('\n'.join(gdb_script).encode('utf-8'))
+		print(cmd)
+		gdb = subprocess.check_call(cmd)
+
 
 	return output
 
@@ -791,8 +847,7 @@ if __name__=='__main__':
 		)
 	elif '--vga' in sys.argv:
 		mkkernel(
-			with_socket=True, with_tty=True, with_clock=True, with_sync=True, 
-			with_signals=True, with_ufs=True,
+			with_socket=True, with_tty=True, with_clock=True, with_sync=True, with_signals=True, with_ufs=True,
 			allow_unresolved=True, vga=True,
 		)
 	else:
