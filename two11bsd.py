@@ -9,6 +9,82 @@ MEMORY {} /* default */
 SECTIONS {}
 '''
 
+ARCH = '''
+#define MACHINE_BITS 32
+#define BITS_PER_LONG MACHINE_BITS
+#define bool _Bool
+#define true 1
+#define false 0
+typedef unsigned char u8;
+typedef unsigned short u16;
+typedef unsigned int u32;
+typedef unsigned long u64;
+typedef signed char i8;
+typedef signed short i16;
+typedef signed int i32;
+typedef signed long i64;
+typedef u32 size_t;
+'''
+
+UART = '''
+#define UART_BASE 0x10000000
+#define UART_RBR_OFFSET 0  /* In:  Recieve Buffer Register */
+#define UART_THR_OFFSET 0  /* Out: Transmitter Holding Register */
+#define UART_DLL_OFFSET 0  /* Out: Divisor Latch Low */
+#define UART_IER_OFFSET 1  /* I/O: Interrupt Enable Register */
+#define UART_DLM_OFFSET 1  /* Out: Divisor Latch High */
+#define UART_FCR_OFFSET 2  /* Out: FIFO Control Register */
+#define UART_IIR_OFFSET 2  /* I/O: Interrupt Identification Register */
+#define UART_LCR_OFFSET 3  /* Out: Line Control Register */
+#define UART_MCR_OFFSET 4  /* Out: Modem Control Register */
+#define UART_LSR_OFFSET 5  /* In:  Line Status Register */
+#define UART_MSR_OFFSET 6  /* In:  Modem Status Register */
+#define UART_SCR_OFFSET 7  /* I/O: Scratch Register */
+#define UART_MDR1_OFFSET 8 /* I/O:  Mode Register */
+#define PLATFORM_UART_INPUT_FREQ 10000000
+#define PLATFORM_UART_BAUDRATE 115200
+static u8 *uart_base_addr = (u8 *)UART_BASE;
+static void set_reg(u32 offset, u32 val){ writeu8(uart_base_addr + offset, val);}
+static u32 get_reg(u32 offset){ return readu8(uart_base_addr + offset);}
+static void uart_putc(u8 ch){ set_reg(UART_THR_OFFSET, ch);}
+static void uart_print(char *str){ while (*str) uart_putc(*str++);}
+
+static inline void uart_init(){
+  u16 bdiv = (PLATFORM_UART_INPUT_FREQ + 8 * PLATFORM_UART_BAUDRATE) / (16 * PLATFORM_UART_BAUDRATE);
+  set_reg(UART_IER_OFFSET, 0x00); /* Disable all interrupts */
+  set_reg(UART_LCR_OFFSET, 0x80); /* Enable DLAB */
+  if (bdiv) {
+    set_reg(UART_DLL_OFFSET, bdiv & 0xff); /* Set divisor low byte */
+    set_reg(UART_DLM_OFFSET, (bdiv >> 8) & 0xff); /* Set divisor high byte */
+  }
+  set_reg(UART_LCR_OFFSET, 0x03); /* 8 bits, no parity, one stop bit */
+  set_reg(UART_FCR_OFFSET, 0x01); /* Enable FIFO */
+  set_reg(UART_MCR_OFFSET, 0x00); /* No modem control DTR RTS */
+  get_reg(UART_LSR_OFFSET); /* Clear line status */
+  get_reg(UART_RBR_OFFSET); /* Read receive buffer */  
+  set_reg(UART_SCR_OFFSET, 0x00); /* Set scratchpad */
+}
+'''
+
+LIBC = r'''
+void *memset(void *s, int c, size_t n){
+  unsigned char *p = s;
+  while (n--) *p++ = (unsigned char)c;
+  return s;
+}
+void *memcpy(void *dest, const void *src, size_t n){
+  unsigned char *d = dest;
+  const unsigned char *s = src;
+  while (n--) *d++ = *s++;
+  return dest;
+}
+#define VRAM ((volatile u8 *)0x50000000)
+void putpixel(int x, int y, char c){
+	VRAM[y*320 + x] = c;
+}
+'''
+
+
 VGA_S = r'''
 	# PCI is at 0x30000000
 	# VGA is at 00:01.0, using extended control regs (4096 bytes)
@@ -438,6 +514,11 @@ struct  mbuf *mclfree;
 
 
 void firmware_main(){
+	putpixel(0,0,100);
+	putpixel(1,1,10);
+	putpixel(2,2,32);
+	uart_init();
+	uart_print("hello 2.11BSD\\n");
 	struct proc *p;
 	//p = &proc[0];
 	//p->p_addr = *ka6;
@@ -614,7 +695,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 
 	defines.append('SUPERVISOR')
 	rtmp = '/tmp/_riscv_.c'
-	C = [RISCV_MACHINE_MIN]
+	C = [ARCH, UART, LIBC, RISCV_MACHINE_MIN]
 
 	if not with_ufs and with_socket:
 		C.append(KLIB_NAMEI)
@@ -700,6 +781,13 @@ if __name__=='__main__':
 		mkkernel(
 			with_socket=True, with_tty=True, with_clock=True, with_sync=True, 
 			with_signals=True, with_ufs=True,
+		)
+	elif '--all' in sys.argv:
+		mkkernel(
+			with_signals=True, with_fs=True, with_ufs=True, with_sync=True, with_clock=True, with_exec=True, 
+			with_socket=True, with_sysctl=True, with_tty=True, with_exit=True, with_subr=True, with_generic=True,
+			with_resource=True, with_log=True, with_sysent=True, with_malloc=True,
+			with_kern_xxx=True, with_init_main=True,
 		)
 	elif '--vga' in sys.argv:
 		mkkernel(
