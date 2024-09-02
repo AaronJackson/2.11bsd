@@ -1,19 +1,33 @@
 #!/usr/bin/env python3
 import os, sys, subprocess
 
-RISCV_MACHINE = '''
-#include <stdint.h>
-#include "param.h"
-#include "../machine/seg.h"
-#include "../machine/iopage.h"
+KLIB_NAMEI = '''
+/*
+ * Convert a pathname into a pointer to a locked inode.
+ * This is a very central and rather complicated routine.
+ * If the file system is not maintained in a strict tree hierarchy,
+ * this can result in a deadlock situation (see comments in code below).
+ *
+ * The flag argument is LOOKUP, CREATE, or DELETE depending on whether
+ * the name is to be looked up, created, or deleted. When CREATE or
+ * DELETE is specified, information usable in creating or deleteing a
+ * directory entry is also calculated. If flag has LOCKPARENT or'ed
+ * into it and the target of the pathname exists, namei returns both
+ * the target and its parent directory locked. When creating and
+ * LOCKPARENT is specified, the target may not be ".".  When deleting
+ * and LOCKPARENT is specified, the target may be ".", but the caller
+ * must check to insure it does an irele and iput instead of two iputs.
+ ......................
+ 	... see ufs_namei.c
+*/
+#include "namei.h"
+struct inode* namei(struct nameidata *ndp){
+	//TODO
+}
+'''
 
-#include "dir.h"
-#include "inode.h"
-#include "user.h"
-#include "proc.h"
-#include "fs.h"
-#include "map.h"
-#include "buf.h"
+KLIB_COPYINOUT = '''
+#include <stdint.h>
 
 int copyin(const void *fromaddr, void *toaddr, size_t length) {
 	// Check for invalid addresses or lengths
@@ -60,6 +74,23 @@ int copyout(const void *fromaddr, void *toaddr, size_t length) {
 
 	return 0; // Success
 }
+
+
+'''
+
+KLIB_TODO = '''
+#include "param.h"
+#include "../machine/seg.h"
+#include "../machine/iopage.h"
+
+#include "dir.h"
+#include "inode.h"
+#include "user.h"
+#include "proc.h"
+#include "fs.h"
+#include "map.h"
+#include "buf.h"
+
 
 int vcopyin(const void *fromaddr, void *toaddr, size_t length) {
 	// Check for invalid addresses or lengths
@@ -223,13 +254,24 @@ RISCV_MACHINE_MIN = '''
 #include "param.h"
 #include "user.h"
 #include "proc.h"
+#include "mbuf.h"
+
 int	cmask = CMASK;
 int	netoff = 1;
 struct user u = {};
 
+struct	domain *domains;
+struct	mbstat mbstat;
+int	 m_want;
+char mclrefcnt[NMBCLUSTERS + 1];
+int	nmbclusters;
+struct  mbuf *mfree;
+struct  mbuf *mclfree;
+
+
 void _start(){
 	struct proc *p;
-	p = &proc[0];
+	//p = &proc[0];
 	//p->p_addr = *ka6;
 	p->p_stat = SRUN;
 	p->p_flag |= SLOAD|SSYS;
@@ -274,7 +316,7 @@ void KScall(void *func, int nbytes, ...){
 	//TODO
 }
 
-'''
+''' + KLIB_COPYINOUT
 
 
 def c2o(file, out='/tmp/c2o.o', includes=None, defines=None, opt='-O0', bits=64 ):
@@ -400,8 +442,15 @@ def mkkernel(output='/tmp/two11bsd.elf',
 			includes=includes, defines=defs, bits=32)
 		obs.append(o)
 
+
+	defines.append('SUPERVISOR')
 	rtmp = '/tmp/_riscv_.c'
-	open(rtmp,'w').write(RISCV_MACHINE_MIN)
+	C = [RISCV_MACHINE_MIN]
+
+	if not with_ufs and with_socket:
+		C.append(KLIB_NAMEI)
+
+	open(rtmp,'w').write('\n'.join(C))
 	o = c2o(
 		rtmp, 
 		out = '/tmp/_riscv_.o',
@@ -455,5 +504,12 @@ def mkkernel(output='/tmp/two11bsd.elf',
 if __name__=='__main__':
 	if '--inet' in sys.argv:
 		mkkernel(with_socket=True)
+	elif '--tty' in sys.argv:
+		mkkernel(with_socket=True, with_tty=True)
+	elif '--micro' in sys.argv:
+		mkkernel(
+			with_socket=True, with_tty=True, with_clock=True, with_sync=True, 
+			with_signals=True, with_ufs=True,
+		)
 	else:
 		mkkernel()
