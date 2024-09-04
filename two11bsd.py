@@ -5,6 +5,49 @@ import os, sys, subprocess, atexit
 QEMU32 = 'qemu-system-riscv32'
 QEMU64 = 'qemu-system-riscv64'
 
+
+FIRMWARE_START = '''
+#define CONSOLE_MAX 50
+void firmware_main(){
+	clear_screen(1);
+	putpixel(10,10,100);
+	uart_init();
+	putpixel(11,11,10);
+	putc('!');
+	uart_print("hello 2.11BSD\\n");
+	int needs_redraw = 1;
+	char key;
+	int cblink = 1;
+	int cx = 1;
+	int cy = 0;
+	char prompt[CONSOLE_MAX];
+	int prompt_index = 0;
+	int mx, my, pmx, pmy;
+	char bgcolor = 1;
+	while (1){
+
+'''
+
+
+CURSOR_UPDATE = '''
+	if (prompt_index){
+		vga_printn(prompt, prompt_index, cx, cy, 110);
+	}
+
+'''
+
+FIRMWARE_END = '''
+		needs_redraw = 0;
+		cblink ++;
+		if (cblink >=10) cblink=0;
+		for (int i=0; i<8; i++){
+			putpixel(i+(cx*6), 10+(cy*7), cblink);
+		}
+
+	}
+}
+'''
+
 KLIB_KEYBOARD = '''
 int __keyboard_pressed(){
 	u32 *ptr = (volatile u32*)0x11000;
@@ -23,12 +66,14 @@ int __keyboard_char(){
 KEYBOARD_LOGIC = '''
 	key = __keyboard_char();
 	if(key) {
-		bgcolor = key;
 		uart_putc(key);
+		prompt[prompt_index++]=key;
+		if (prompt_index >= CONSOLE_MAX) prompt_index=0;
+		cx ++;
+		if (cx >= CONSOLE_MAX) cx = 0;
 		needs_redraw=1;
-	} else {
-		bgcolor = 1;
 	}
+
 '''
 
 KLIB_MOUSE = '''
@@ -661,27 +706,6 @@ void KScall(void *func, int nbytes, ...){
 
 ''' + KLIB_COPYINOUT
 
-FIRMWARE_START = '''
-void firmware_main(){
-	clear_screen(1);
-	putpixel(10,10,100);
-	uart_init();
-	putpixel(11,11,10);
-	putc('!');
-	uart_print("hello 2.11BSD\\n");
-	int needs_redraw = 1;
-	char key;
-	int mx, my, pmx, pmy;
-	char bgcolor = 1;
-	while (1){
-
-'''
-
-FIRMWARE_END = '''
-		needs_redraw = 0;
-	}
-}
-'''
 
 TODO='''
 
@@ -880,6 +904,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	if '--mouse' in sys.argv:
 		C.append(MOUSE_DRAW)
 
+	C.append(CURSOR_UPDATE)
 	C.append('}')
 	C.append(FIRMWARE_END)
 
