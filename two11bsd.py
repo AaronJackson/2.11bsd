@@ -756,7 +756,8 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		with_machdep=False, with_resource=False, with_log=False, with_sysent=False, with_malloc=False,
 		with_kern_accounting=False, ## "This module is a shadow of its former self. SHOULD REPLACE THIS WITH A DRIVER THAT CAN BE READ TO SIMPLIFY.""
 		with_kern_xxx=False, with_init_main=False,
-		allow_unresolved=False, vga=False, 
+		allow_unresolved=False, 
+		vga=True, 
 		gdb='--gdb' in sys.argv or '--gdb-step' in sys.argv,
 		bits=32,
 		):
@@ -850,7 +851,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 
 	defines.append('SUPERVISOR')
 	rtmp = '/tmp/_riscv_.c'
-	C = [ARCH, ARCH_ASM, UART, LIBC, RISCV_MACHINE_MIN]
+	C = [ARCH, ARCH_ASM, UART, LIBC, RISCV_MACHINE_MIN, KLIB_FONT]
 
 	#if with_tty:
 	#	C.append(KLIB_TTY)
@@ -872,8 +873,10 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	C.append('	clear_screen(bgcolor);')
 
 	if '--test-draw' in sys.argv:
-		C.append( text2c('hello world') )
-		C.append('draw_hello_world(0,0,10);')
+		#C.append( text2c('hello world') )
+		#C.append('draw_hello_world(0,0,10);')
+		hi = 'hello world! 2.11BSD'
+		C.append('vga_printn("%s", %s, 0,0, 110);' % (hi, len(hi)))
 	if '--mouse' in sys.argv:
 		C.append(MOUSE_DRAW)
 
@@ -1016,24 +1019,67 @@ def mkkernel(output='/tmp/two11bsd.elf',
 
 	return output
 
-def text2c( text ):
+def text2c( text, font_size=7, offset=(0,0), thresh=32 ):
 	from PIL import Image, ImageDraw, ImageFont
-	canvas = Image.new('RGBA', (320,200))
+	width = font_size * len(text)
+	height = font_size * 2
+	if width > 320: width = 320
+	if height > 200: height = 200
+	canvas = Image.new('RGBA', (width,height))
 	draw = ImageDraw.Draw(canvas)
-	monospace = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf", 6)
-	draw.text((10, 10), text, font=monospace)
-	out = ['void draw_%s(int x, int y, char c){' % text.replace(' ','_') ]
-	for y in range(200):
-		for x in range(320):
+	monospace = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf", font_size)
+	draw.text(offset, text, font=monospace)
+	#canvas.show()
+	if text in ('\\', '*'): out = []
+	else: out = ['//'+text]
+	if len(text)==1:
+		tag = ord(text)
+	else:
+		tag = text.replace(' ','_')
+	out += ['void draw_%s(int x, int y, char c){' % tag ]
+	for y in range(height):
+		for x in range(width):
 			pix = canvas.getpixel((x,y))
 			if any(pix):
-				#print(pix)
 				r,g,b,a = pix
-				if a > 32:
+				if a > thresh:
 					out.append('	putpixel(x+%s, y+%s, c);' % (x,y))
 
 	out.append('}')
 	return '\n'.join(out)
+
+def genfont():
+	import string
+	o = []
+	vprint = [
+		'void vga_putc(char c, int x, int y, char color){',
+		'	switch (c){',
+
+	]
+	for char in string.ascii_letters + string.digits + string.punctuation:
+		o.append( text2c(char) )
+		vprint += [
+			'		case %s:{' % ord(char),
+			'			draw_%s(x,y,color);' %ord(char),
+			'			break;',
+			'		}',
+		]
+	vprint += [
+		'	}',
+		'}',
+	]
+
+
+	vprint += [
+		'void vga_printn(char *c, int n, int x, int y, char color){',
+		'	for (int i=0; i<n; i++){',
+		'		vga_putc(c[i], x+(i*6), y, color);',
+		'	}',
+		'}',
+	]
+	return '\n'.join(o+vprint)
+
+KLIB_FONT = genfont()
 
 if __name__=='__main__':
 	if '--mouse' in sys.argv or '--keyboard' in sys.argv:
