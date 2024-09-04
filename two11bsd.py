@@ -6,19 +6,29 @@ QEMU32 = 'qemu-system-riscv32'
 QEMU64 = 'qemu-system-riscv64'
 
 KLIB_KEYBOARD = '''
-u8 __keyboard_pressed(){
+int __keyboard_pressed(){
 	u32 *ptr = (volatile u32*)0x11000;
 	return ptr[3];
 }
-u8 __keyboard_mod_pressed(){
+int __keyboard_mod_pressed(){
 	u32 *ptr = (volatile u32*)0x11000;
 	return ptr[4];
+}
+int __keyboard_char(){
+	u32 *ptr = (volatile u32*)0x11000;
+	return ptr[5];
 }
 '''
 
 KEYBOARD_LOGIC = '''
-	key = __keyboard_pressed();
-	if(key) uart_putc(key);
+	key = __keyboard_char();
+	if(key) {
+		bgcolor = key;
+		uart_putc(key);
+		needs_redraw=1;
+	} else {
+		bgcolor = 1;
+	}
 '''
 
 KLIB_MOUSE = '''
@@ -662,6 +672,7 @@ void firmware_main(){
 	int needs_redraw = 1;
 	char key;
 	int mx, my, pmx, pmy;
+	char bgcolor = 1;
 	while (1){
 
 '''
@@ -858,7 +869,7 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		C.append(KEYBOARD_LOGIC)
 
 	C.append('if(needs_redraw){')
-	C.append('	clear_screen(1);')
+	C.append('	clear_screen(bgcolor);')
 
 	if '--test-draw' in sys.argv:
 		C.append( text2c('hello world') )
@@ -1025,7 +1036,7 @@ def text2c( text ):
 	return '\n'.join(out)
 
 if __name__=='__main__':
-	if '--mouse' in sys.argv:
+	if '--mouse' in sys.argv or '--keyboard' in sys.argv:
 		ensure_qemu_virt_extra()
 
 
