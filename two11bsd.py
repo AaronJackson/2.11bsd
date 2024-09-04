@@ -5,6 +5,22 @@ import os, sys, subprocess, atexit
 QEMU32 = 'qemu-system-riscv32'
 QEMU64 = 'qemu-system-riscv64'
 
+KLIB_KEYBOARD = '''
+u8 __keyboard_pressed(){
+	u32 *ptr = (volatile u32*)0x11000;
+	return ptr[3];
+}
+u8 __keyboard_mod_pressed(){
+	u32 *ptr = (volatile u32*)0x11000;
+	return ptr[4];
+}
+'''
+
+KEYBOARD_LOGIC = '''
+	key = __keyboard_pressed();
+	if(key) uart_putc(key);
+'''
+
 KLIB_MOUSE = '''
 int debug_get_mouse(u32 idx){
 	u32 *ptr = (volatile u32*)0x11000;
@@ -644,6 +660,7 @@ void firmware_main(){
 	putc('!');
 	uart_print("hello 2.11BSD\\n");
 	int needs_redraw = 1;
+	char key;
 	int mx, my, pmx, pmy;
 	while (1){
 
@@ -823,9 +840,22 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	defines.append('SUPERVISOR')
 	rtmp = '/tmp/_riscv_.c'
 	C = [ARCH, ARCH_ASM, UART, LIBC, RISCV_MACHINE_MIN]
+
+	#if with_tty:
+	#	C.append(KLIB_TTY)
+	if not with_ufs and with_socket:
+		C.append(KLIB_NAMEI)
+
+	if '--mouse' in sys.argv:
+		C.append(KLIB_MOUSE)
+	if '--keyboard' in sys.argv:
+		C.append(KLIB_KEYBOARD)
+
 	C.append(FIRMWARE_START)
 	if '--mouse' in sys.argv:
 		C.append(MOUSE_LOGIC)
+	if '--keyboard' in sys.argv:
+		C.append(KEYBOARD_LOGIC)
 
 	C.append('if(needs_redraw){')
 	C.append('	clear_screen(1);')
@@ -837,16 +867,8 @@ def mkkernel(output='/tmp/two11bsd.elf',
 		C.append(MOUSE_DRAW)
 
 	C.append('}')
-
 	C.append(FIRMWARE_END)
 
-	#if with_tty:
-	#	C.append(KLIB_TTY)
-	if not with_ufs and with_socket:
-		C.append(KLIB_NAMEI)
-
-	if '--mouse' in sys.argv:
-		C.append(KLIB_MOUSE)
 
 	open(rtmp,'w').write('\n'.join(C))
 	o = c2o(
