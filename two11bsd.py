@@ -2,6 +2,43 @@
 # 2.11BSD RISC-V: BrentHarts 2024
 import os, sys, subprocess, atexit
 
+QEMU32 = 'qemu-system-riscv32'
+QEMU64 = 'qemu-system-riscv64'
+
+KLIB_MOUSE = '''
+int debug_get_mouse(u32 idx){
+	u32 *ptr = (volatile u32*)0x11000;
+	return ptr[idx];
+}
+'''
+
+MOUSE_LOGIC = '''
+	mx = debug_get_mouse(0);
+	my = debug_get_mouse(1);
+	if (mx!=pmx || my!=pmy) {
+		needs_redraw=1;
+		pmx = mx; pmy = my;
+	}
+'''
+
+MOUSE_DRAW = '''
+putpixel(mx,my,100);
+putpixel(mx+1,my+1,10);
+putpixel(mx+2,my+2,32);
+'''
+
+
+def ensure_qemu_virt_extra():
+	global QEMU32
+	if not os.path.isdir('./qemu'):
+		cmd = ['git', 'clone', '--depth', '1', 'https://github.com/brentharts/qemu.git']
+		subprocess.check_call(cmd)
+		subprocess.check_call(['python3', './qemu.py', '--build', '--riscv32'], cwd='./qemu')
+	QEMU32 = './qemu/build/qemu-system-riscv32'
+	assert os.path.isfile(QEMU32)
+	return QEMU32
+
+
 LINKER_SCRIPT = '''
 ENTRY(_start)
 MEMORY {} /* default */
@@ -574,19 +611,51 @@ struct  mbuf *mfree;
 struct  mbuf *mclfree;
 
 
+
+/*
+ * SKcall(func, nbytes, a1, ..., aN)
+ *
+ * C-call from supervisor to kernel.
+ * Calls func(a1, ..., aN) in kernel mode.
+*/
+
+void SKcall(void *func, int nbytes, ...){
+	//TODO
+}
+
+/*
+ * KScall(func, nbytes, a1, ..., aN)
+ *
+ * C-call from kernel to supervisor.
+ * Calls func(a1, ..., aN) in supervisor mode.
+*/
+void KScall(void *func, int nbytes, ...){
+	//TODO
+}
+
+''' + KLIB_COPYINOUT
+
+FIRMWARE_START = '''
 void firmware_main(){
 	clear_screen(1);
 	putpixel(10,10,100);
-	putpixel(10,11,100);
 	uart_init();
 	putpixel(11,11,10);
-	putpixel(12,12,32);
-	putc('!');
-	putc('!');
 	putc('!');
 	uart_print("hello 2.11BSD\\n");
+	int needs_redraw = 1;
+	int mx, my, pmx, pmy;
+	while (1){
 
-	//$MAGIC
+'''
+
+FIRMWARE_END = '''
+		needs_redraw = 0;
+	}
+}
+'''
+
+TODO='''
 
 	struct proc *p;
 	//p = &proc[0];
@@ -613,29 +682,8 @@ void firmware_main(){
 
 }
 
-/*
- * SKcall(func, nbytes, a1, ..., aN)
- *
- * C-call from supervisor to kernel.
- * Calls func(a1, ..., aN) in kernel mode.
-*/
 
-void SKcall(void *func, int nbytes, ...){
-	//TODO
-}
-
-/*
- * KScall(func, nbytes, a1, ..., aN)
- *
- * C-call from kernel to supervisor.
- * Calls func(a1, ..., aN) in supervisor mode.
-*/
-void KScall(void *func, int nbytes, ...){
-	//TODO
-}
-
-''' + KLIB_COPYINOUT
-
+'''
 
 def c2o(file, out='/tmp/c2o.o', includes=None, defines=None, opt='-O0', bits=64 ):
 	if 'fedora' in os.uname().nodename:
@@ -774,18 +822,31 @@ def mkkernel(output='/tmp/two11bsd.elf',
 
 	defines.append('SUPERVISOR')
 	rtmp = '/tmp/_riscv_.c'
-	C = [ARCH, ARCH_ASM, UART, LIBC]
+	C = [ARCH, ARCH_ASM, UART, LIBC, RISCV_MACHINE_MIN]
+	C.append(FIRMWARE_START)
+	if '--mouse' in sys.argv:
+		C.append(MOUSE_LOGIC)
+
+	C.append('if(needs_redraw){')
+	C.append('	clear_screen(1);')
+
 	if '--test-draw' in sys.argv:
 		C.append( text2c('hello world') )
-		c = 'draw_hello_world(0,0,10);'
-		C.append(RISCV_MACHINE_MIN.replace('//$MAGIC', c))
-	else:
-		C.append(RISCV_MACHINE_MIN)
+		C.append('draw_hello_world(0,0,10);')
+	if '--mouse' in sys.argv:
+		C.append(MOUSE_DRAW)
+
+	C.append('}')
+
+	C.append(FIRMWARE_END)
 
 	#if with_tty:
 	#	C.append(KLIB_TTY)
 	if not with_ufs and with_socket:
 		C.append(KLIB_NAMEI)
+
+	if '--mouse' in sys.argv:
+		C.append(KLIB_MOUSE)
 
 	open(rtmp,'w').write('\n'.join(C))
 	o = c2o(
@@ -849,8 +910,8 @@ def mkkernel(output='/tmp/two11bsd.elf',
 	print(cmd)
 	subprocess.check_call(cmd)
 
-	if bits==32: q = 'qemu-system-riscv32'
-	else: q = 'qemu-system-riscv64'
+	if bits==32: q = QEMU32 
+	else: q = QEMU64
 	cmd = [
 		q,
 		'-M', 'virt',
@@ -942,6 +1003,10 @@ def text2c( text ):
 	return '\n'.join(out)
 
 if __name__=='__main__':
+	if '--mouse' in sys.argv:
+		ensure_qemu_virt_extra()
+
+
 	if '--inet' in sys.argv:
 		mkkernel(with_socket=True)
 	elif '--tty' in sys.argv:
