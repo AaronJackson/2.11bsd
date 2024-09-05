@@ -17,6 +17,7 @@ void firmware_main(){
 	uart_print("hello 2.11BSD\\n");
 	int needs_redraw = 1;
 	char key;
+	char prevkey = 0;
 	int cblink = 1;
 	int cx = 1;
 	int cy = 0;
@@ -30,8 +31,8 @@ void firmware_main(){
 
 
 CURSOR_UPDATE = '''
-	if (prompt_index){
-		vga_printn(prompt, prompt_index, cx, cy, 110);
+	if (prompt_index && needs_redraw){
+		vga_printn(prompt, prompt_index, 0, cy*7, 110);
 	}
 
 '''
@@ -40,10 +41,9 @@ FIRMWARE_END = '''
 		needs_redraw = 0;
 		cblink ++;
 		if (cblink >=10) cblink=0;
-		for (int i=0; i<8; i++){
-			putpixel(i+(cx*6), 10+(cy*7), cblink);
+		for (int i=-5; i<5; i++){
+			putpixel(i+(cx*5), 10+(cy*7), cblink);
 		}
-
 	}
 }
 '''
@@ -65,14 +65,29 @@ int __keyboard_char(){
 
 KEYBOARD_LOGIC = '''
 	key = __keyboard_char();
-	if(key) {
-		uart_putc(key);
-		prompt[prompt_index++]=key;
-		if (prompt_index >= CONSOLE_MAX) prompt_index=0;
-		cx ++;
-		if (cx >= CONSOLE_MAX) cx = 0;
+	if(key && (key!=prevkey)) {
+		//backspace
+		if (key==8){
+			uart_putc('B');
+			prompt_index --;
+			cx --;
+		} else if (key==13){
+			cy ++;
+		} else if (key==27){
+			cx = 0;
+			cy = 0;
+			prompt_index=0;
+		} else {
+			uart_putc(key);
+			prompt[prompt_index++]=key;
+			if (prompt_index >= CONSOLE_MAX) prompt_index=0;
+			cx ++;
+			if (cx >= CONSOLE_MAX) cx = 0;
+
+		}
 		needs_redraw=1;
 	}
+	prevkey = key;
 
 '''
 
@@ -1044,7 +1059,16 @@ def mkkernel(output='/tmp/two11bsd.elf',
 
 	return output
 
-def text2c( text, font_size=7, offset=(0,0), thresh=32 ):
+#DEFAULT_FONT = '/usr/share/fonts/truetype/freefont/FreeMono.ttf'
+#DEFAULT_FONT = '/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf'
+DEFAULT_FONT = "/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf"
+for arg in sys.argv:
+	if arg.endswith('.ttf'):
+		DEFAULT_FONT = arg
+
+FONT_SIZE = 8
+
+def text2c( text, font_size=FONT_SIZE, offset=(0,0), thresh=40 ):
 	from PIL import Image, ImageDraw, ImageFont
 	width = font_size * len(text)
 	height = font_size * 2
@@ -1052,7 +1076,7 @@ def text2c( text, font_size=7, offset=(0,0), thresh=32 ):
 	if height > 200: height = 200
 	canvas = Image.new('RGBA', (width,height))
 	draw = ImageDraw.Draw(canvas)
-	monospace = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf", font_size)
+	monospace = ImageFont.truetype(DEFAULT_FONT, font_size)
 	draw.text(offset, text, font=monospace)
 	#canvas.show()
 	if text in ('\\', '*'): out = []
@@ -1098,7 +1122,7 @@ def genfont():
 	vprint += [
 		'void vga_printn(char *c, int n, int x, int y, char color){',
 		'	for (int i=0; i<n; i++){',
-		'		vga_putc(c[i], x+(i*6), y, color);',
+		'		vga_putc(c[i], x+(i*%s), y, color);' %(FONT_SIZE-2),
 		'	}',
 		'}',
 	]
